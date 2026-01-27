@@ -1,14 +1,14 @@
 """
 Label Converter: JSON -> YOLO Format
 
-Konvertiert die synthetischen Dartboard-Labels vom JSON-Format
-in das YOLO-Format für Object Detection.
+Converts the synthetic dartboard labels from JSON format
+into the YOLO format for object detection.
 
 Features:
-- Jeder Keypoint wird zu einer kleinen Bounding Box
-- Klassen: 0=Dart, 1=Center, 2-5=Kalibrationspunkte K1-K4
+- Each keypoint becomes a small bounding box
+- Classes: 0=Dart, 1=Center, 2-5=Calibration points K1-K4
 - On-The-Fly Background Augmentation (optional)
-- Mehrere Variationen pro Bild möglich
+- Multiple variations per image supported
 """
 
 import json
@@ -23,7 +23,7 @@ import yaml
 import cv2
 import numpy as np
 
-# BackgroundProvider importieren falls vorhanden
+# Import BackgroundProvider if available
 try:
     from dataset import BackgroundProvider
     BG_PROVIDER_AVAILABLE = True
@@ -31,7 +31,7 @@ except ImportError:
     BG_PROVIDER_AVAILABLE = False
 
 
-# Klassen-Mapping
+# Class Mapping
 CLASS_MAPPING = {
     'dart': 0,
     'Dartboard_Center': 1,
@@ -43,23 +43,23 @@ CLASS_MAPPING = {
 
 
 def load_json_label(json_path: Path) -> Dict:
-    """Lädt eine JSON Label-Datei."""
+    """Loads a JSON label file."""
     with open(json_path, 'r') as f:
         return json.load(f)
 
 
 def keypoint_to_bbox(x: float, y: float, bbox_size: float) -> Tuple[float, float, float, float]:
     """
-    Konvertiert einen Keypoint zu einer Bounding Box.
+    Converts a keypoint to a bounding box.
 
     Args:
-        x, y: Normalisierte Keypoint-Koordinaten (0-1)
-        bbox_size: Größe der BBox als Fraction der Bildgröße
+        x, y: Normalized keypoint coordinates (0-1)
+        bbox_size: Size of the BBox as a fraction of the image size
 
     Returns:
-        (x_center, y_center, width, height) - alle normalisiert
+        (x_center, y_center, width, height) - all normalized
     """
-    # Der Keypoint ist bereits das Zentrum
+    # The keypoint is already the center
     return (x, y, bbox_size, bbox_size)
 
 
@@ -68,18 +68,18 @@ def convert_single_label(
     bbox_size: float = 0.025
 ) -> List[str]:
     """
-    Konvertiert ein einzelnes JSON-Label zu YOLO-Format.
+    Converts a single JSON label to YOLO format.
 
     Args:
-        label_data: Geladene JSON-Daten
-        bbox_size: Größe der Keypoint-BBoxen
+        label_data: Loaded JSON data
+        bbox_size: Size of the keypoint BBoxes
 
     Returns:
-        Liste von YOLO-Format Strings (eine Zeile pro Objekt)
+        List of YOLO format strings (one line per object)
     """
     lines = []
 
-    # 1. Dartboard Keypoints (Kalibrierung)
+    # 1. Dartboard Keypoints (Calibration)
     if 'dartboard' in label_data and 'keypoints' in label_data['dartboard']:
         for kp in label_data['dartboard']['keypoints']:
             name = kp['name']
@@ -89,7 +89,7 @@ def convert_single_label(
             if not is_visible:
                 continue
 
-            # Prüfen ob Keypoint im gültigen Bereich liegt
+            # Check if keypoint is within valid range
             half_box = bbox_size / 2
             if x - half_box < 0 or x + half_box > 1 or y - half_box < 0 or y + half_box > 1:
                 continue
@@ -108,7 +108,7 @@ def convert_single_label(
             if not is_visible:
                 continue
 
-            # Prüfen ob Dart im gültigen Bereich liegt
+            # Check if dart is within valid range
             half_box = bbox_size / 2
             if x - half_box < 0 or x + half_box > 1 or y - half_box < 0 or y + half_box > 1:
                 continue
@@ -126,7 +126,7 @@ def create_dataset_yaml(
     val_dir: str = "images/val",
     test_dir: str = "images/test"
 ) -> None:
-    """Erstellt die dataset.yaml für YOLO."""
+    """Creates the dataset.yaml for YOLO."""
     yaml_content = {
         'path': str(output_dir.absolute()),
         'train': train_dir,
@@ -140,7 +140,7 @@ def create_dataset_yaml(
     with open(yaml_path, 'w') as f:
         yaml.dump(yaml_content, f, default_flow_style=False, sort_keys=False)
 
-    print(f"Dataset YAML erstellt: {yaml_path}")
+    print(f"Dataset YAML created: {yaml_path}")
 
 
 def apply_background(
@@ -149,34 +149,34 @@ def apply_background(
     output_size: Tuple[int, int] = (800, 800)
 ) -> np.ndarray:
     """
-    Lädt ein PNG mit Transparenz und fügt einen Hintergrund hinzu.
+    Loads a PNG with transparency and adds a background.
 
     Args:
-        image_path: Pfad zum PNG-Bild
-        bg_provider: BackgroundProvider Instanz
-        output_size: Ausgabegröße (width, height)
+        image_path: Path to PNG image
+        bg_provider: BackgroundProvider instance
+        output_size: Output size (width, height)
 
     Returns:
-        BGR Bild ohne Transparenz
+        BGR image without transparency
     """
-    # Bild mit Alpha laden
+    # Load image with alpha
     img = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
 
     if img is None:
-        raise ValueError(f"Konnte Bild nicht laden: {image_path}")
+        raise ValueError(f"Could not load image: {image_path}")
 
-    # Auf Zielgröße skalieren
+    # Scale to target size
     if img.shape[:2] != output_size[::-1]:
         img = cv2.resize(img, output_size, interpolation=cv2.INTER_LINEAR)
 
-    # Falls kein Alpha-Kanal, direkt zurückgeben
+    # If no alpha channel, return directly
     if img.shape[2] != 4:
         return img[:, :, :3]
 
-    # Hintergrund holen
+    # Get background
     bg = bg_provider.get_random()
 
-    # Alpha-Blending
+    # Alpha blending
     alpha = img[:, :, 3:4] / 255.0
     fg_rgb = img[:, :, :3]
     blended = (fg_rgb * alpha + bg * (1 - alpha)).astype(np.uint8)
@@ -197,25 +197,25 @@ def convert_dataset(
     output_size: int = 800
 ) -> Dict[str, int]:
     """
-    Konvertiert den gesamten Datensatz von JSON zu YOLO-Format.
+    Converts the entire dataset from JSON to YOLO format.
 
     Args:
-        input_dir: Pfad zum Eingabe-Datensatz (mit images/ und labels/)
-        output_dir: Pfad zum Ausgabe-Datensatz
-        bbox_size: Größe der Keypoint-BBoxen
-        train_ratio, val_ratio, test_ratio: Aufteilung der Daten
-        seed: Random Seed für reproduzierbare Splits
-        background_source: Pfad zu Hintergrundbildern oder None
-        num_variations: Anzahl Variationen pro Bild (mit unterschiedl. Hintergründen)
-        output_size: Ausgabe-Bildgröße
+        input_dir: Path to input dataset (with images/ and labels/)
+        output_dir: Path to output dataset
+        bbox_size: Size of keypoint BBoxes
+        train_ratio, val_ratio, test_ratio: Data splits
+        seed: Random seed for reproducible splits
+        background_source: Path to background images or None
+        num_variations: Number of variations per image (with different backgrounds)
+        output_size: Output image size
 
     Returns:
-        Dictionary mit Statistiken
+        Dictionary with statistics
     """
     random.seed(seed)
     np.random.seed(seed)
 
-    # Background Provider erstellen falls gewünscht
+    # Create Background Provider if desired
     bg_provider = None
     if background_source and BG_PROVIDER_AVAILABLE:
         from dataset import BackgroundProvider
@@ -223,34 +223,34 @@ def convert_dataset(
             source=background_source,
             output_size=(output_size, output_size)
         )
-        print(f"Background Augmentation aktiviert: {num_variations} Variationen pro Bild")
+        print(f"Background augmentation enabled: {num_variations} variations per image")
     elif background_source and not BG_PROVIDER_AVAILABLE:
-        print("WARNUNG: BackgroundProvider nicht verfügbar, überspringe Augmentation")
+        print("WARNING: BackgroundProvider not available, skipping augmentation")
 
-    # Pfade
+    # Paths
     input_images = input_dir / 'images'
     input_labels = input_dir / 'labels'
 
-    # Prüfen ob Input existiert
+    # Check if input exists
     if not input_images.exists():
-        raise FileNotFoundError(f"Images Ordner nicht gefunden: {input_images}")
+        raise FileNotFoundError(f"Images folder not found: {input_images}")
     if not input_labels.exists():
-        raise FileNotFoundError(f"Labels Ordner nicht gefunden: {input_labels}")
+        raise FileNotFoundError(f"Labels folder not found: {input_labels}")
 
-    # Output-Struktur erstellen
+    # Create output structure
     splits = ['train', 'val', 'test']
     for split in splits:
         (output_dir / 'images' / split).mkdir(parents=True, exist_ok=True)
         (output_dir / 'labels' / split).mkdir(parents=True, exist_ok=True)
 
-    # Alle JSON-Dateien sammeln
+    # Collect all JSON files
     json_files = sorted(list(input_labels.glob('*.json')))
-    print(f"Gefunden: {len(json_files)} Label-Dateien")
+    print(f"Found: {len(json_files)} label files")
 
     if len(json_files) == 0:
-        raise ValueError("Keine JSON-Dateien gefunden!")
+        raise ValueError("No JSON files found!")
 
-    # Shuffle und Split
+    # Shuffle and split
     random.shuffle(json_files)
     n_total = len(json_files)
     n_train = int(n_total * train_ratio)
@@ -262,7 +262,7 @@ def convert_dataset(
         'test': json_files[n_train + n_val:]
     }
 
-    # Statistiken
+    # Statistics
     stats = {
         'total': n_total,
         'train': len(split_indices['train']),
@@ -273,15 +273,15 @@ def convert_dataset(
         'skipped': 0
     }
 
-    # Konvertieren
+    # Convert
     for split, files in split_indices.items():
-        print(f"\nKonvertiere {split} Split ({len(files)} Dateien)...")
+        print(f"\nConverting {split} split ({len(files)} files)...")
 
         for json_path in tqdm(files, desc=split):
-            # Bildname ableiten
+            # Derive image name
             stem = json_path.stem
 
-            # Mögliche Bild-Extensions
+            # Possible image extensions
             img_path = None
             for ext in ['.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG']:
                 candidate = input_images / f"{stem}{ext}"
@@ -290,41 +290,41 @@ def convert_dataset(
                     break
 
             if img_path is None:
-                print(f"Warnung: Kein Bild gefunden für {stem}")
+                print(f"Warning: No image found for {stem}")
                 stats['skipped'] += 1
                 continue
 
-            # Label konvertieren
+            # Convert label
             try:
                 label_data = load_json_label(json_path)
                 yolo_lines = convert_single_label(label_data, bbox_size)
             except Exception as e:
-                print(f"Fehler bei {json_path}: {e}")
+                print(f"Error at {json_path}: {e}")
                 stats['skipped'] += 1
                 continue
 
             if len(yolo_lines) == 0:
-                print(f"Warnung: Keine gültigen Labels für {stem}")
+                print(f"Warning: No valid labels for {stem}")
                 stats['skipped'] += 1
                 continue
 
-            # Statistiken aktualisieren
+            # Update statistics
             n_darts = sum(1 for line in yolo_lines if line.startswith('0 '))
             n_keypoints = len(yolo_lines) - n_darts
 
-            # Anzahl Variationen (nur für Training, Val/Test bekommen 1)
+            # Number of variations (only for training, val/test get 1)
             n_vars = num_variations if split == 'train' and bg_provider else 1
 
             for var_idx in range(n_vars):
-                # Dateiname mit Variation
+                # Filename with variation
                 if n_vars > 1:
                     out_stem = f"{stem}_v{var_idx:03d}"
                 else:
                     out_stem = stem
 
-                # Bild verarbeiten
+                # Process image
                 if bg_provider:
-                    # Mit Hintergrund-Augmentation
+                    # With background augmentation
                     try:
                         augmented_img = apply_background(
                             img_path, bg_provider, (output_size, output_size)
@@ -332,14 +332,14 @@ def convert_dataset(
                         dst_img = output_dir / 'images' / split / f"{out_stem}.png"
                         cv2.imwrite(str(dst_img), augmented_img)
                     except Exception as e:
-                        print(f"Fehler bei Augmentation {img_path}: {e}")
+                        print(f"Error augmenting {img_path}: {e}")
                         continue
                 else:
-                    # Ohne Augmentation: Bild kopieren
+                    # Without augmentation: Copy image
                     dst_img = output_dir / 'images' / split / f"{out_stem}{img_path.suffix}"
                     shutil.copy2(img_path, dst_img)
 
-                # Label schreiben
+                # Write label
                 dst_label = output_dir / 'labels' / split / f"{out_stem}.txt"
                 with open(dst_label, 'w') as f:
                     f.write('\n'.join(yolo_lines))
@@ -347,7 +347,7 @@ def convert_dataset(
                 stats['total_darts'] += n_darts
                 stats['total_keypoints'] += n_keypoints
 
-    # Dataset YAML erstellen
+    # Create dataset YAML
     create_dataset_yaml(output_dir)
 
     return stats
@@ -355,25 +355,25 @@ def convert_dataset(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Konvertiert JSON-Labels zu YOLO-Format'
+        description='Converts JSON labels to YOLO format'
     )
     parser.add_argument(
         '--input', '-i',
         type=str,
         default='datasets/dataset_0',
-        help='Eingabe-Datensatz Pfad'
+        help='Input dataset path'
     )
     parser.add_argument(
         '--output', '-o',
         type=str,
         default='datasets/dataset_0_yolo',
-        help='Ausgabe-Datensatz Pfad'
+        help='Output dataset path'
     )
     parser.add_argument(
         '--bbox-size',
         type=float,
         default=0.025,
-        help='Keypoint BBox Größe (Fraction, default: 0.025 = 2.5%%)'
+        help='Keypoint BBox size (Fraction, default: 0.025 = 2.5%%)'
     )
     parser.add_argument(
         '--train-ratio',
@@ -403,24 +403,24 @@ def main():
         '--backgrounds', '-b',
         type=str,
         default=None,
-        help='Hintergrund-Ordner oder "textures" für auto-download'
+        help='Background folder or "textures" for auto-download'
     )
     parser.add_argument(
         '--variations', '-v',
         type=int,
         default=1,
-        help='Anzahl Hintergrund-Variationen pro Bild (default: 1)'
+        help='Number of background variations per image (default: 1)'
     )
     parser.add_argument(
         '--size',
         type=int,
         default=800,
-        help='Ausgabe-Bildgröße (default: 800)'
+        help='Output image size (default: 800)'
     )
 
     args = parser.parse_args()
 
-    # Pfade relativ zum Script-Verzeichnis
+    # Paths relative to script directory
     script_dir = Path(__file__).parent.parent
     input_dir = script_dir / args.input
     output_dir = script_dir / args.output
@@ -440,7 +440,7 @@ def main():
     print(f"Image Size:  {args.size}")
     print("=" * 50)
 
-    # Konvertieren
+    # Convert
     stats = convert_dataset(
         input_dir=input_dir,
         output_dir=output_dir,
@@ -454,17 +454,17 @@ def main():
         output_size=args.size
     )
 
-    # Statistiken ausgeben
+    # Print statistics
     print("\n" + "=" * 50)
-    print("Konvertierung abgeschlossen!")
+    print("Conversion finished!")
     print("=" * 50)
-    print(f"Gesamt Bilder:     {stats['total']}")
+    print(f"Total Images:      {stats['total']}")
     print(f"  - Train:         {stats['train']}")
     print(f"  - Validation:    {stats['val']}")
     print(f"  - Test:          {stats['test']}")
-    print(f"  - Übersprungen:  {stats['skipped']}")
-    print(f"Gesamt Darts:      {stats['total_darts']}")
-    print(f"Gesamt Keypoints:  {stats['total_keypoints']}")
+    print(f"  - Skipped:       {stats['skipped']}")
+    print(f"Total Darts:       {stats['total_darts']}")
+    print(f"Total Keypoints:   {stats['total_keypoints']}")
     print(f"\nDataset YAML: {output_dir / 'dataset.yaml'}")
 
 

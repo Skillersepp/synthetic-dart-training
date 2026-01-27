@@ -1,7 +1,7 @@
 """
 YOLO26 Prediction & Evaluation Script
 
-Führt Inference durch und berechnet Metriken (PCS, MASE).
+Runs inference and calculates metrics (PCS, MASE).
 """
 
 import argparse
@@ -17,7 +17,7 @@ try:
     from ultralytics import YOLO
 except ImportError:
     raise ImportError(
-        "ultralytics nicht installiert. Bitte installieren mit:\n"
+        "ultralytics not installed. Please install with:\n"
         "pip install ultralytics"
     )
 
@@ -25,7 +25,7 @@ from utils.scoring import DartScorer, calculate_pcs, calculate_mase
 from utils.visualization import draw_predictions, save_prediction_image
 
 
-# Klassen-Mapping (umgekehrt)
+# Class Mapping (reversed)
 CLASS_NAMES = {
     0: 'dart',
     1: 'cal_center',
@@ -38,13 +38,13 @@ CLASS_NAMES = {
 
 def parse_yolo_results(results) -> List[Dict]:
     """
-    Parst YOLO Ergebnisse in ein einheitliches Format.
+    Parses YOLO results into a unified format.
 
     Args:
         results: YOLO Prediction Results
 
     Returns:
-        Liste von Detections mit class_id, x_center, y_center, width, height, confidence
+        List of detections with class_id, x_center, y_center, width, height, confidence
     """
     detections = []
 
@@ -54,7 +54,7 @@ def parse_yolo_results(results) -> List[Dict]:
             continue
 
         for i in range(len(boxes)):
-            # Koordinaten (xyxy format zu xywh normalisiert)
+            # Coordinates (xyxy format to xywh normalized)
             xyxy = boxes.xyxy[i].cpu().numpy()
             img_h, img_w = result.orig_shape
 
@@ -78,13 +78,13 @@ def parse_yolo_results(results) -> List[Dict]:
 
 def detections_to_keypoints(detections: List[Dict]) -> Dict:
     """
-    Konvertiert Detections zu Keypoint-Dictionary für Score-Berechnung.
+    Converts detections to a keypoint dictionary for score calculation.
 
     Args:
-        detections: Liste von Detections
+        detections: List of detections
 
     Returns:
-        Dictionary mit 'darts' und 'calibration' Listen
+        Dictionary with 'darts' and 'calibration' lists
     """
     darts = []
     calibration = [None] * 5  # [center, k1, k2, k3, k4]
@@ -100,7 +100,7 @@ def detections_to_keypoints(detections: List[Dict]) -> Dict:
         elif 2 <= class_id <= 5:  # K1-K4
             calibration[class_id - 1] = point
 
-    # Nur gültige Kalibrationspunkte behalten
+    # Only keep valid calibration points
     calibration = [p for p in calibration if p is not None]
 
     return {
@@ -111,10 +111,10 @@ def detections_to_keypoints(detections: List[Dict]) -> Dict:
 
 def load_ground_truth(json_path: Path) -> Dict:
     """
-    Lädt Ground Truth aus JSON-Datei.
+    Loads Ground Truth from JSON file.
 
     Returns:
-        Dictionary mit 'darts' (Positionen + Scores) und 'calibration'
+        Dictionary with 'darts' (positions + scores) and 'calibration'
     """
     with open(json_path, 'r') as f:
         data = json.load(f)
@@ -147,7 +147,7 @@ def predict_single(
     iou_threshold: float = 0.7
 ) -> Tuple[List[Dict], np.ndarray]:
     """
-    Führt Prediction für ein einzelnes Bild durch.
+    Performs prediction for a single image.
 
     Returns:
         (detections, image)
@@ -160,10 +160,10 @@ def predict_single(
         verbose=False
     )
 
-    # Bild laden
+    # Load image
     img = cv2.imread(str(image_path))
 
-    # Ergebnisse parsen
+    # Parse results
     detections = parse_yolo_results(results)
 
     return detections, img
@@ -180,48 +180,48 @@ def evaluate(
     verbose: bool = True
 ) -> Dict:
     """
-    Evaluiert das Modell auf einem Datensatz.
+    Evaluates the model on a dataset.
 
     Args:
-        model_path: Pfad zum trainierten Modell
-        data_dir: Pfad zum YOLO-Datensatz
-        split: 'train', 'val', oder 'test'
+        model_path: Path to trained model
+        data_dir: Path to YOLO dataset
+        split: 'train', 'val', or 'test'
         conf_threshold: Confidence Threshold
-        iou_threshold: IoU Threshold für NMS
-        output_dir: Ausgabe-Ordner für Bilder
-        write_images: Bilder mit Predictions speichern
-        verbose: Detaillierte Ausgabe
+        iou_threshold: IoU Threshold for NMS
+        output_dir: Output folder for images
+        write_images: Save images with predictions
+        verbose: Detailed output
 
     Returns:
-        Dictionary mit Metriken
+        Dictionary with metrics
     """
     data_dir = Path(data_dir)
     model = YOLO(model_path)
 
-    # Pfade
+    # Paths
     images_dir = data_dir / 'images' / split
     labels_dir = data_dir / 'labels' / split
 
-    # Suche nach Original-Labels (JSON)
-    # Wir brauchen die JSON-Labels für die Ground Truth Scores
+    # Search for original labels (JSON)
+    # We need the JSON labels for the ground truth scores
     original_labels_dir = data_dir.parent / data_dir.name.replace('_yolo', '') / 'labels'
 
     if not images_dir.exists():
-        raise FileNotFoundError(f"Images nicht gefunden: {images_dir}")
+        raise FileNotFoundError(f"Images not found: {images_dir}")
 
-    # Output-Ordner
+    # Output folder
     if output_dir:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Alle Bilder sammeln
+    # Collect all images
     image_files = sorted(list(images_dir.glob('*.png')) + list(images_dir.glob('*.jpg')))
-    print(f"Evaluiere {len(image_files)} Bilder aus {split} Split...")
+    print(f"Evaluating {len(image_files)} images from {split} split...")
 
     # Scorer
     scorer = DartScorer()
 
-    # Ergebnisse sammeln
+    # Collect results
     results = {
         'predictions': [],
         'ground_truth': [],
@@ -236,10 +236,10 @@ def evaluate(
             model, img_path, conf_threshold, iou_threshold
         )
 
-        # Keypoints extrahieren
+        # Extract Keypoints
         keypoints = detections_to_keypoints(detections)
 
-        # Score berechnen (wenn genug Kalibrationspunkte)
+        # Calculate score (if enough calibration points)
         pred_score = 0
         score_strings = []
 
@@ -255,9 +255,9 @@ def evaluate(
                 score_strings = [s[0] for s in scores]
             except Exception as e:
                 if verbose:
-                    print(f"Score-Fehler bei {img_path.name}: {e}")
+                    print(f"Score error at {img_path.name}: {e}")
 
-        # Ground Truth laden (falls vorhanden)
+        # Load Ground Truth (if available)
         gt_score = 0
         json_path = original_labels_dir / f"{img_path.stem}.json"
         if json_path.exists():
@@ -268,18 +268,18 @@ def evaluate(
         results['gt_scores'].append(gt_score)
         results['errors'].append(abs(pred_score - gt_score))
 
-        # Bild speichern
+        # Save image
         if write_images and output_dir:
             result_img = draw_predictions(img, detections, scores=score_strings)
 
-            # Score-Info hinzufügen
+            # Add Score Info
             text = f"Pred: {pred_score} | GT: {gt_score}"
             cv2.putText(result_img, text, (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
             cv2.imwrite(str(output_dir / img_path.name), result_img)
 
-    # Metriken berechnen
+    # Calculate metrics
     pcs = calculate_pcs(results['pred_scores'], results['gt_scores'])
     mase = calculate_mase(results['pred_scores'], results['gt_scores'])
 
@@ -291,11 +291,11 @@ def evaluate(
         'errors': results['errors']
     }
 
-    # Ausgabe
+    # Output
     print(f"\n{'='*50}")
     print(f"Evaluation Results ({split})")
     print(f"{'='*50}")
-    print(f"Bilder:                    {metrics['num_images']}")
+    print(f"Images:                    {metrics['num_images']}")
     print(f"Percent Correct Score:     {pcs:.1f}%")
     print(f"Mean Absolute Score Error: {mase:.2f}")
     print(f"{'='*50}\n")
@@ -311,10 +311,10 @@ def predict_image(
     show: bool = False
 ) -> Dict:
     """
-    Prediction für ein einzelnes Bild.
+    Prediction for a single image.
 
     Returns:
-        Dictionary mit Detections und Scores
+        Dictionary with detections and scores
     """
     model = YOLO(model_path)
     image_path = Path(image_path)
@@ -322,7 +322,7 @@ def predict_image(
     # Prediction
     detections, img = predict_single(model, image_path, conf_threshold)
 
-    # Keypoints und Scores
+    # Keypoints and scores
     keypoints = detections_to_keypoints(detections)
     scorer = DartScorer()
 
@@ -340,23 +340,23 @@ def predict_image(
                 'total': sum(s[1] for s in scores)
             }
         except Exception as e:
-            print(f"Score-Berechnung fehlgeschlagen: {e}")
+            print(f"Score calculation failed: {e}")
 
-    # Visualisierung
+    # Visualization
     score_strings = [s[0] for s, _ in score_info.get('scores', [])] or None
     result_img = draw_predictions(img, detections, scores=score_strings)
 
-    # Score-Text
+    # Score Text
     text = f"Total: {score_info['total']}"
     cv2.putText(result_img, text, (10, 30),
                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-    # Speichern
+    # Save
     if output_path:
         cv2.imwrite(output_path, result_img)
-        print(f"Gespeichert: {output_path}")
+        print(f"Saved: {output_path}")
 
-    # Anzeigen
+    # Show
     if show:
         cv2.imshow('Prediction', result_img)
         cv2.waitKey(0)
@@ -374,25 +374,25 @@ def main():
         description='YOLO26 Prediction & Evaluation'
     )
 
-    subparsers = parser.add_subparsers(dest='command', help='Kommando')
+    subparsers = parser.add_subparsers(dest='command', help='Command')
 
     # Evaluate Subcommand
-    eval_parser = subparsers.add_parser('evaluate', help='Modell evaluieren')
-    eval_parser.add_argument('--model', '-m', required=True, help='Modell-Pfad')
-    eval_parser.add_argument('--data', '-d', required=True, help='Dataset-Pfad')
+    eval_parser = subparsers.add_parser('evaluate', help='Evaluate model')
+    eval_parser.add_argument('--model', '-m', required=True, help='Model path')
+    eval_parser.add_argument('--data', '-d', required=True, help='Dataset path')
     eval_parser.add_argument('--split', '-s', default='test', help='Split')
     eval_parser.add_argument('--conf', type=float, default=0.25, help='Confidence')
     eval_parser.add_argument('--iou', type=float, default=0.7, help='IoU Threshold')
-    eval_parser.add_argument('--output', '-o', help='Output-Ordner')
-    eval_parser.add_argument('--write', action='store_true', help='Bilder speichern')
+    eval_parser.add_argument('--output', '-o', help='Output folder')
+    eval_parser.add_argument('--write', action='store_true', help='Save images')
 
     # Predict Subcommand
-    pred_parser = subparsers.add_parser('predict', help='Einzelbild Prediction')
-    pred_parser.add_argument('--model', '-m', required=True, help='Modell-Pfad')
-    pred_parser.add_argument('--image', '-i', required=True, help='Bild-Pfad')
+    pred_parser = subparsers.add_parser('predict', help='Single image prediction')
+    pred_parser.add_argument('--model', '-m', required=True, help='Model path')
+    pred_parser.add_argument('--image', '-i', required=True, help='Image path')
     pred_parser.add_argument('--conf', type=float, default=0.25, help='Confidence')
-    pred_parser.add_argument('--output', '-o', help='Output-Pfad')
-    pred_parser.add_argument('--show', action='store_true', help='Bild anzeigen')
+    pred_parser.add_argument('--output', '-o', help='Output path')
+    pred_parser.add_argument('--show', action='store_true', help='Show image')
 
     args = parser.parse_args()
 
@@ -414,9 +414,9 @@ def main():
             output_path=args.output,
             show=args.show
         )
-        print(f"\nErgebnis:")
-        print(f"  Darts gefunden: {len(result['keypoints']['darts'])}")
-        print(f"  Kalibrationspunkte: {len(result['keypoints']['calibration'])}")
+        print(f"\nResult:")
+        print(f"  Darts found: {len(result['keypoints']['darts'])}")
+        print(f"  Calibration points: {len(result['keypoints']['calibration'])}")
         print(f"  Scores: {result['scores']}")
     else:
         parser.print_help()

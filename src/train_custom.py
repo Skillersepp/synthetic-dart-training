@@ -1,11 +1,11 @@
 """
-Custom Training Script mit On-The-Fly Background Augmentation
+Custom Training Script with On-The-Fly Background Augmentation
 
-Dieses Script nutzt einen eigenen Training-Loop mit PyTorch,
-um volle Kontrolle über die Augmentation zu haben.
+This script utilizes a custom training loop with PyTorch to maintain
+full control over the data augmentation process.
 
-Für schnelles Prototyping: Nutze train.py mit vorverarbeiteten Daten.
-Für maximale Flexibilität: Nutze dieses Script.
+For rapid prototyping: Use train.py with pre-processed data.
+For maximum flexibility: Use this script.
 """
 
 import argparse
@@ -22,7 +22,7 @@ import numpy as np
 try:
     from ultralytics import YOLO
 except ImportError:
-    raise ImportError("ultralytics nicht installiert: pip install ultralytics")
+    raise ImportError("ultralytics not installed: pip install ultralytics")
 
 from dataset import DartboardDataset, BackgroundProvider
 
@@ -35,7 +35,7 @@ def train_one_epoch(
     epoch,
     total_epochs
 ):
-    """Trainiert eine Epoche."""
+    """Trains for one epoch."""
     model.train()
     total_loss = 0
     pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{total_epochs}")
@@ -44,12 +44,12 @@ def train_one_epoch(
         images = batch['images'].to(device)
         labels = batch['labels']
 
-        # Forward pass durch YOLO
-        # HINWEIS: Dies ist vereinfacht - YOLO hat komplexere Loss-Berechnung
+        # Forward pass through YOLO
+        # NOTE: This is simplified - YOLO uses a more complex loss calculation
         optimizer.zero_grad()
 
-        # Bei ultralytics müssen wir anders vorgehen
-        # Hier nutzen wir einen Workaround
+        # With ultralytics we need to proceed differently
+        # Here we use a workaround
         loss = model.model(images, labels)
 
         if isinstance(loss, dict):
@@ -66,25 +66,25 @@ def train_one_epoch(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Custom Training mit On-The-Fly Background Augmentation'
+        description='Custom Training with On-The-Fly Background Augmentation'
     )
 
-    parser.add_argument('--images', '-i', required=True, help='Bilder-Ordner (PNG mit Transparenz)')
-    parser.add_argument('--labels', '-l', required=True, help='Labels-Ordner (YOLO TXT)')
-    parser.add_argument('--backgrounds', '-b', default=None, help='Hintergrund-Ordner oder "imagenet"/"coco"/"textures"')
-    parser.add_argument('--model', '-m', default='yolo26n', help='Modell (yolo26n/s/m/l/x)')
-    parser.add_argument('--epochs', '-e', type=int, default=100, help='Anzahl Epochen')
-    parser.add_argument('--batch', type=int, default=16, help='Batch-Größe')
-    parser.add_argument('--imgsz', type=int, default=800, help='Bildgröße')
+    parser.add_argument('--images', '-i', required=True, help='Images folder (PNG with transparency)')
+    parser.add_argument('--labels', '-l', required=True, help='Labels folder (YOLO TXT)')
+    parser.add_argument('--backgrounds', '-b', default=None, help='Backgrounds folder or "imagenet"/"coco"/"textures"')
+    parser.add_argument('--model', '-m', default='yolo26n', help='Model (yolo26n/s/m/l/x)')
+    parser.add_argument('--epochs', '-e', type=int, default=100, help='Number of epochs')
+    parser.add_argument('--batch', type=int, default=16, help='Batch size')
+    parser.add_argument('--imgsz', type=int, default=800, help='Image size')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning Rate')
     parser.add_argument('--device', default='0', help='Device (0, 0,1, cpu)')
     parser.add_argument('--workers', type=int, default=4, help='DataLoader Workers')
-    parser.add_argument('--output', '-o', default='runs/train_custom', help='Output-Ordner')
+    parser.add_argument('--output', '-o', default='runs/train_custom', help='Output folder')
 
     args = parser.parse_args()
 
     print("=" * 60)
-    print("Custom Training mit Background Augmentation")
+    print("Custom Training with Background Augmentation")
     print("=" * 60)
     print(f"Images:      {args.images}")
     print(f"Labels:      {args.labels}")
@@ -102,7 +102,7 @@ def main():
 
     print(f"Device: {device}")
 
-    # Dataset erstellen
+    # Create Dataset
     dataset = DartboardDataset(
         images_dir=args.images,
         labels_dir=args.labels,
@@ -124,28 +124,28 @@ def main():
         }
     )
 
-    print(f"Dataset: {len(dataset)} Bilder")
+    print(f"Dataset: {len(dataset)} images")
 
-    # Model laden
+    # Load Model
     model = YOLO(f'{args.model}.pt')
-    print(f"Model geladen: {args.model}")
+    print(f"Model loaded: {args.model}")
 
-    # HINWEIS: Für echtes Training mit YOLO ist es besser,
-    # die Bilder vorher zu verarbeiten (augment_backgrounds.py)
-    # und dann model.train() zu nutzen.
+    # NOTE: For real training with YOLO it is better to
+    # process images beforehand (augment_backgrounds.py)
+    # and then use model.train().
 
     print("\n" + "=" * 60)
-    print("HINWEIS:")
-    print("Für optimales Training mit ultralytics YOLO empfehle ich:")
+    print("NOTE:")
+    print("For optimal training with ultralytics YOLO I recommend:")
     print("1. python src/augment_backgrounds.py (Preprocessing)")
     print("2. python src/convert_labels.py")
     print("3. python src/train.py")
     print("")
-    print("Dieser Custom-Trainer ist für spezielle Anwendungsfälle.")
+    print("This custom trainer is for special use cases.")
     print("=" * 60)
 
-    # Stattdessen: Zeige wie man die Bilder on-the-fly sehen kann
-    print("\nZeige 3 Beispielbilder mit zufälligen Hintergründen...")
+    # Instead: Show how to view images on-the-fly
+    print("\nShowing 3 sample images with random backgrounds...")
 
     import cv2
     output_dir = Path(args.output) / 'samples'
@@ -156,9 +156,9 @@ def main():
         img = (sample['image'].permute(1, 2, 0).numpy() * 255).astype(np.uint8)
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         cv2.imwrite(str(output_dir / f'sample_{i}.png'), img)
-        print(f"  Gespeichert: {output_dir / f'sample_{i}.png'}")
+        print(f"  Saved: {output_dir / f'sample_{i}.png'}")
 
-    print(f"\nBeispielbilder gespeichert in: {output_dir}")
+    print(f"\nSample images saved in: {output_dir}")
 
 
 if __name__ == '__main__':

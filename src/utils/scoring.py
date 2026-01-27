@@ -1,8 +1,8 @@
 """
 Dart Scoring Utilities
 
-Berechnet den Score basierend auf Dart-Positionen und Kalibrationspunkten.
-Adaptiert von DeepDarts, erweitert für 5 Kalibrationspunkte (inkl. Center).
+Calculates the score based on dart positions and calibration points.
+Adapted from DeepDarts, extended for 5 calibration points (incl. center).
 """
 
 import numpy as np
@@ -10,16 +10,16 @@ from typing import List, Tuple, Dict, Optional, Union
 import cv2
 
 
-# Dartboard-Nummern im Uhrzeigersinn, startend bei 12 Uhr (20)
+# Dartboard numbers clockwise, starting at 12 o'clock (20)
 BOARD_NUMBERS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
 
-# Winkel zu Nummer Mapping (alle 18°)
-# 0° = 12 Uhr = 20, dann im Uhrzeigersinn
+# Angle to number mapping (every 18 degrees)
+# 0° = 12 o'clock = 20, then clockwise
 ANGLE_TO_NUMBER = {i: BOARD_NUMBERS[i] for i in range(20)}
 
 
 class DartboardGeometry:
-    """Dartboard-Geometrie nach BDO Standard."""
+    """Dartboard geometry according to BDO standard."""
 
     def __init__(
         self,
@@ -31,11 +31,11 @@ class DartboardGeometry:
     ):
         """
         Args:
-            r_double: Radius bis Außenkante Double (in Metern)
-            r_treble: Radius bis Außenkante Treble (in Metern)
-            r_outer_bull: Radius Outer Bull (in Metern)
-            r_inner_bull: Radius Inner Bull / Double Bull (in Metern)
-            w_ring: Breite der Double/Treble Ringe (in Metern)
+            r_double: Radius to outer edge of Double (in meters)
+            r_treble: Radius to outer edge of Treble (in meters)
+            r_outer_bull: Radius Outer Bull (in meters)
+            r_inner_bull: Radius Inner Bull / Double Bull (in meters)
+            w_ring: Width of Double/Treble rings (in meters)
         """
         self.r_double = r_double
         self.r_treble = r_treble
@@ -44,7 +44,7 @@ class DartboardGeometry:
         self.w_ring = w_ring
 
     def get_radii_ratios(self) -> Dict[str, float]:
-        """Gibt die Radien als Verhältnisse zum Double-Radius zurück."""
+        """Returns radii as ratios to the Double radius."""
         return {
             'double_outer': 1.0,
             'double_inner': 1.0 - (self.w_ring / self.r_double),
@@ -57,17 +57,17 @@ class DartboardGeometry:
 
 class DartScorer:
     """
-    Berechnet Dart-Scores basierend auf Keypoint-Positionen.
+    Calculates dart scores based on keypoint positions.
 
-    Unterstützt zwei Modi:
-    - 4 Kalibrationspunkte (wie DeepDarts)
-    - 5 Kalibrationspunkte (mit Center)
+    Supports two modes:
+    - 4 calibration points (like DeepDarts)
+    - 5 calibration points (with center)
     """
 
     def __init__(self, geometry: Optional[DartboardGeometry] = None):
         """
         Args:
-            geometry: Dartboard-Geometrie (default: BDO Standard)
+            geometry: Dartboard geometry (default: BDO standard)
         """
         self.geometry = geometry or DartboardGeometry()
         self.ratios = self.geometry.get_radii_ratios()
@@ -78,26 +78,26 @@ class DartScorer:
         has_center: bool = True
     ) -> Tuple[np.ndarray, float]:
         """
-        Schätzt Zentrum und Radius aus den Kalibrationspunkten.
+        Estimates center and radius from calibration points.
 
         Args:
-            keypoints: Array der Kalibrationspunkte
-                       [center, k1, k2, k3, k4] wenn has_center=True
-                       [k1, k2, k3, k4] wenn has_center=False
-            has_center: Ob der erste Punkt das Zentrum ist
+            keypoints: Array of calibration points
+                       [center, k1, k2, k3, k4] if has_center=True
+                       [k1, k2, k3, k4] if has_center=False
+            has_center: Whether the first point is the center
 
         Returns:
-            (center, radius) - Zentrum und mittlerer Radius
+            (center, radius) - Center and average radius
         """
         if has_center:
             center = keypoints[0]
             outer_points = keypoints[1:5]
         else:
-            # Zentrum aus den 4 äußeren Punkten schätzen
+            # Estimate center from the 4 outer points
             center = np.mean(keypoints[:4], axis=0)
             outer_points = keypoints[:4]
 
-        # Radius als mittlere Distanz der äußeren Punkte zum Zentrum
+        # Radius as mean distance of outer points to center
         distances = np.linalg.norm(outer_points - center, axis=1)
         radius = np.mean(distances)
 
@@ -110,26 +110,25 @@ class DartScorer:
         has_center: bool = True
     ) -> Tuple[np.ndarray, np.ndarray, float]:
         """
-        Transformiert Punkte in ein normalisiertes Koordinatensystem.
+        Transforms points into a normalized coordinate system.
 
-        Die Kalibrationspunkte werden verwendet, um eine perspektivische
-        Korrektur durchzuführen und die Punkte relativ zum Dartboard-Zentrum
-        zu normalisieren.
+        Calibration points are used to perform a perspective 
+        correction and normalize points relative to the dartboard center.
 
         Args:
-            points: Zu transformierende Punkte (z.B. Dart-Positionen)
-            cal_keypoints: Kalibrationspunkte
-            has_center: Ob ein Center-Keypoint vorhanden ist
+            points: Points to transform (e.g. dart positions)
+            cal_keypoints: Calibration points
+            has_center: Whether a center keypoint is present
 
         Returns:
             (transformed_points, center, radius)
         """
         center, radius = self.estimate_center_and_radius(cal_keypoints, has_center)
 
-        # Punkte relativ zum Zentrum
+        # Points relative to center
         transformed = points - center
 
-        # Normalisieren auf Radius = 1 für Double-Ring
+        # Normalize to radius = 1 for Double Ring
         transformed = transformed / radius
 
         return transformed, center, radius
@@ -141,40 +140,40 @@ class DartScorer:
         radius: float
     ) -> Tuple[str, int]:
         """
-        Berechnet den Score für einen einzelnen Punkt.
+        Calculates the score for a single point.
 
         Args:
-            point: Dart-Position (normalisiert, 0-1)
-            center: Board-Zentrum
-            radius: Board-Radius (Double-Ring)
+            point: Dart position (normalized, 0-1)
+            center: Board center
+            radius: Board radius (Double Ring)
 
         Returns:
             (score_string, score_numeric)
-            z.B. ("T20", 60) oder ("DB", 50)
+            e.g. ("T20", 60) or ("DB", 50)
         """
-        # Relative Position zum Zentrum
+        # Relative position to center
         rel = point - center
 
-        # Distanz (normalisiert auf Double-Radius)
+        # Distance (normalized to Double radius)
         dist = np.linalg.norm(rel) / radius
 
-        # Winkel (0° = oben, im Uhrzeigersinn)
-        angle = np.arctan2(rel[0], -rel[1])  # x, -y für "oben = 0°"
+        # Angle (0° = top, clockwise)
+        angle = np.arctan2(rel[0], -rel[1])  # x, -y for "top = 0°"
         angle_deg = np.degrees(angle)
         if angle_deg < 0:
             angle_deg += 360
 
-        # Segment bestimmen (20 Segmente à 18°)
-        # Offset von 9° weil die Segmentgrenzen bei 9°, 27°, etc. liegen
+        # Determine segment (20 segments of 18° each)
+        # Offset of 9° because segment boundaries are at 9°, 27°, etc.
         segment_angle = (angle_deg + 9) % 360
         segment_idx = int(segment_angle / 18) % 20
         number = BOARD_NUMBERS[segment_idx]
 
-        # Score basierend auf Distanz
+        # Score based on distance
         ratios = self.ratios
 
         if dist > ratios['double_outer']:
-            # Miss - außerhalb des Boards
+            # Miss - outside the board
             return "0", 0
 
         elif dist <= ratios['inner_bull']:
@@ -204,23 +203,23 @@ class DartScorer:
         has_center: bool = True
     ) -> List[Tuple[str, int]]:
         """
-        Berechnet Scores für alle Darts.
+        Calculates scores for all darts.
 
         Args:
-            dart_positions: Array mit Dart-Positionen [(x, y), ...]
-            cal_keypoints: Array mit Kalibrationspunkten
-            has_center: Ob ein Center-Keypoint vorhanden ist
+            dart_positions: Array of dart positions [(x, y), ...]
+            cal_keypoints: Array of calibration points
+            has_center: Whether a center keypoint is present
 
         Returns:
-            Liste von (score_string, score_numeric) Tupeln
+            List of (score_string, score_numeric) tuples
         """
         if len(dart_positions) == 0:
             return []
 
-        # Zentrum und Radius bestimmen
+        # Determine center and radius
         center, radius = self.estimate_center_and_radius(cal_keypoints, has_center)
 
-        # Scores berechnen
+        # Calculate scores
         scores = []
         for dart in dart_positions:
             score_str, score_num = self.point_to_score(dart, center, radius)
@@ -235,17 +234,17 @@ def get_dart_scores(
     geometry: Optional[DartboardGeometry] = None
 ) -> Dict:
     """
-    Convenience-Funktion zur Score-Berechnung aus Predictions.
+    Convenience function to calculate scores from predictions.
 
     Args:
-        predictions: Dictionary mit 'darts' und 'calibration' Keys
-                    darts: [(x, y), ...] Dart-Positionen
-                    calibration: [(x, y), ...] Kalibrationspunkte
-        has_center: Ob ein Center-Keypoint vorhanden ist
-        geometry: Dartboard-Geometrie
+        predictions: Dictionary with 'darts' and 'calibration' keys
+                    darts: [(x, y), ...] Dart positions
+                    calibration: [(x, y), ...] Calibration points
+        has_center: Whether a center keypoint is present
+        geometry: Dartboard geometry
 
     Returns:
-        Dictionary mit Scores und Gesamtpunktzahl
+        Dictionary with scores and total score
     """
     scorer = DartScorer(geometry)
 
@@ -256,7 +255,7 @@ def get_dart_scores(
         return {
             'scores': [],
             'total': 0,
-            'error': 'Nicht genug Kalibrationspunkte'
+            'error': 'Not enough calibration points'
         }
 
     scores = scorer.calculate_scores(darts, cal, has_center)
@@ -271,14 +270,14 @@ def get_dart_scores(
 
 def calculate_pcs(predictions: List[int], ground_truth: List[int]) -> float:
     """
-    Berechnet den Percent Correct Score (PCS).
+    Calculates the Percent Correct Score (PCS).
 
     Args:
-        predictions: Liste der vorhergesagten Gesamtscores
-        ground_truth: Liste der tatsächlichen Gesamtscores
+        predictions: List of predicted total scores
+        ground_truth: List of actual total scores
 
     Returns:
-        PCS in Prozent (0-100)
+        PCS in percent (0-100)
     """
     if len(predictions) == 0:
         return 0.0
@@ -289,14 +288,14 @@ def calculate_pcs(predictions: List[int], ground_truth: List[int]) -> float:
 
 def calculate_mase(predictions: List[int], ground_truth: List[int]) -> float:
     """
-    Berechnet den Mean Absolute Score Error (MASE).
+    Calculates the Mean Absolute Score Error (MASE).
 
     Args:
-        predictions: Liste der vorhergesagten Gesamtscores
-        ground_truth: Liste der tatsächlichen Gesamtscores
+        predictions: List of predicted total scores
+        ground_truth: List of actual total scores
 
     Returns:
-        MASE (durchschnittlicher absoluter Fehler)
+        MASE (Average Absolute Error)
     """
     if len(predictions) == 0:
         return 0.0

@@ -1,10 +1,10 @@
 """
-Download DTD (Describable Textures Dataset) für Background Augmentation
+Download DTD (Describable Textures Dataset) for background augmentation.
 
-Das DTD Dataset enthält ~5600 Texturbilder in 47 Kategorien.
-Perfekt als Hintergrund für Dartboard-Training!
+The DTD dataset contains ~5600 texture images in 47 categories.
+Perfect as backgrounds for dartboard training!
 
-Quelle: https://www.robots.ox.ac.uk/~vgg/data/dtd/
+Source: https://www.robots.ox.ac.uk/~vgg/data/dtd/
 """
 
 import os
@@ -27,57 +27,57 @@ class DownloadProgressBar(tqdm):
 
 
 def download_file(url: str, output_path: Path):
-    """Lädt eine Datei mit Fortschrittsanzeige herunter."""
+    """Downloads a file with a progress bar."""
     with DownloadProgressBar(unit='B', unit_scale=True, miniters=1, desc=output_path.name) as t:
         urllib.request.urlretrieve(url, output_path, reporthook=t.update_to)
 
 
 def download_dtd(output_dir: str = "datasets/backgrounds/dtd"):
     """
-    Lädt das DTD Textures Dataset herunter.
+    Downloads the DTD Textures Dataset.
 
     Args:
-        output_dir: Zielordner für die Bilder
+        output_dir: Target folder for the images.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Prüfen ob bereits vorhanden
+    # Check if already exists
     images_dir = output_dir / "images"
     if images_dir.exists() and len(list(images_dir.rglob("*.jpg"))) > 1000:
-        print(f"DTD bereits vorhanden in: {output_dir}")
-        print(f"Gefunden: {len(list(images_dir.rglob('*.jpg')))} Bilder")
+        print(f"DTD already exists in: {output_dir}")
+        print(f"Found: {len(list(images_dir.rglob('*.jpg')))} images")
         return str(images_dir)
 
     # Download
     archive_path = output_dir / "dtd.tar.gz"
-    print(f"Lade DTD Dataset herunter (~{DTD_SIZE_MB}MB)...")
+    print(f"Downloading DTD dataset (~{DTD_SIZE_MB}MB)...")
     print(f"URL: {DTD_URL}")
 
     try:
         download_file(DTD_URL, archive_path)
     except Exception as e:
-        print(f"Download fehlgeschlagen: {e}")
-        print("\nAlternative: Manuell herunterladen von:")
+        print(f"Download failed: {e}")
+        print("\nAlternative: Download manually from:")
         print(f"  {DTD_URL}")
-        print(f"  und entpacken nach: {output_dir}")
+        print(f"  and extract to: {output_dir}")
         return None
 
-    # Entpacken
-    print("Entpacke Archiv...")
+    # Extract
+    print("Extracting archive...")
     with tarfile.open(archive_path, "r:gz") as tar:
         tar.extractall(output_dir)
 
-    # Aufräumen
+    # Cleanup
     archive_path.unlink()
 
-    # Bilder-Ordner finden
+    # Find images folder
     images_dir = output_dir / "dtd" / "images"
     if not images_dir.exists():
         images_dir = output_dir / "images"
 
     n_images = len(list(images_dir.rglob("*.jpg")))
-    print(f"\nFertig! {n_images} Texturbilder verfügbar in:")
+    print(f"\nDone! {n_images} texture images available in:")
     print(f"  {images_dir}")
 
     return str(images_dir)
@@ -90,11 +90,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output", "-o",
         default="datasets/backgrounds/dtd",
-        help="Zielordner"
+        help="Target folder"
     )
     args = parser.parse_args()
 
-    # Relativ zum YOLO26 Ordner
+    # Relative to YOLO26 folder
     script_dir = Path(__file__).parent.parent
     output = script_dir / args.output
 

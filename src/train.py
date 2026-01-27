@@ -1,9 +1,9 @@
 """
-YOLO26 Training Script für Dartboard Detection
+YOLO26 Training Script for Dartboard Detection
 
-Trainiert ein YOLO26 Modell zur Erkennung von:
-- Dart-Positionen (Keypoints)
-- Kalibrationspunkten (Center + K1-K4)
+Trains a YOLO26 model to detect:
+- Dart positions (Keypoints)
+- Calibration points (Center + K1-K4)
 """
 
 import argparse
@@ -16,20 +16,20 @@ try:
     from ultralytics import YOLO
 except ImportError:
     raise ImportError(
-        "ultralytics nicht installiert. Bitte installieren mit:\n"
+        "ultralytics not installed. Please install with:\n"
         "pip install ultralytics"
     )
 
 
 def load_config(config_path: Path) -> dict:
-    """Lädt die Training-Konfiguration."""
+    """Loads the training configuration."""
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
 
 def get_model_name(base_name: str) -> str:
-    """Generiert YOLO26 Modellnamen."""
-    # Mapping von Kurzform zu vollständigem Namen
+    """Generates YOLO26 model name."""
+    # Mapping from short form to full name
     model_map = {
         'yolo26n': 'yolo26n.pt',
         'yolo26s': 'yolo26s.pt',
@@ -57,31 +57,31 @@ def train(
     **kwargs
 ):
     """
-    Trainiert ein YOLO26 Modell.
+    Trains a YOLO26 model.
 
     Args:
-        dataset_yaml: Pfad zur Dataset YAML
-        config_path: Optional Pfad zur Training-Config
-        model_size: Modellgröße (yolo26n, yolo26s, yolo26m, yolo26l, yolo26x)
-        epochs: Anzahl Epochen
-        batch_size: Batch-Größe
-        imgsz: Input-Bildgröße
+        dataset_yaml: Path to dataset YAML
+        config_path: Optional path to training config
+        model_size: Model size (yolo26n, yolo26s, yolo26m, yolo26l, yolo26x)
+        epochs: Number of epochs
+        batch_size: Batch size
+        imgsz: Input image size
         device: Device (None=auto, '0', '0,1', 'cpu')
-        project: Ausgabe-Ordner
-        name: Experiment-Name
-        resume: Training fortsetzen
-        pretrained: Pretrained Weights verwenden
-        patience: Early Stopping Patience
-        workers: Anzahl Dataloader Workers
-        **kwargs: Weitere YOLO Training-Argumente
+        project: Output folder
+        name: Experiment name
+        resume: Resume training
+        pretrained: Use pretrained weights
+        patience: Early stopping patience
+        workers: Number of dataloader workers
+        **kwargs: Further YOLO training arguments
     """
-    # Config laden falls vorhanden
+    # Load config if available
     config = {}
     if config_path and Path(config_path).exists():
         config = load_config(Path(config_path))
-        print(f"Config geladen: {config_path}")
+        print(f"Config loaded: {config_path}")
 
-    # Parameter aus Config übernehmen (falls nicht explizit gesetzt)
+    # Adopt parameters from config (if not explicitly set)
     training_cfg = config.get('training', {})
     aug_cfg = config.get('augmentation', {})
 
@@ -90,17 +90,17 @@ def train(
     imgsz = training_cfg.get('imgsz', imgsz)
     patience = training_cfg.get('patience', patience)
 
-    # Experiment-Name
+    # Experiment name
     if name is None:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         name = f'dartboard_{model_size}_{timestamp}'
 
-    # Modell laden
+    # Load model
     model_name = get_model_name(model_size)
     print(f"\n{'='*60}")
     print(f"YOLO26 Dartboard Training")
     print(f"{'='*60}")
-    print(f"Modell: {model_name}")
+    print(f"Model: {model_name}")
     print(f"Dataset: {dataset_yaml}")
     print(f"Epochs: {epochs}")
     print(f"Batch Size: {batch_size}")
@@ -109,18 +109,18 @@ def train(
     print(f"Output: {project}/{name}")
     print(f"{'='*60}\n")
 
-    # YOLO Modell initialisieren
+    # Initialize YOLO Model
     if resume:
-        # Training fortsetzen
+        # Resume training
         model = YOLO(f'{project}/{name}/weights/last.pt')
     elif pretrained:
-        # Mit pretrained Weights starten
+        # Start with pretrained weights
         model = YOLO(model_name)
     else:
-        # Von Scratch
+        # From scratch
         model = YOLO(model_name.replace('.pt', '.yaml'))
 
-    # Augmentation-Parameter
+    # Augmentation parameters
     augment_args = {
         'degrees': aug_cfg.get('degrees', 180),
         'translate': aug_cfg.get('translate', 0.1),
@@ -137,7 +137,7 @@ def train(
         'copy_paste': aug_cfg.get('copy_paste', 0.0),
     }
 
-    # Training starten
+    # Start training
     results = model.train(
         data=dataset_yaml,
         epochs=epochs,
@@ -165,7 +165,7 @@ def train(
         box=config.get('loss', {}).get('box', 7.5),
         cls=config.get('loss', {}).get('cls', 0.5),
         dfl=config.get('loss', {}).get('dfl', 1.5),
-        # Zusätzliche Argumente
+        # Additional arguments
         plots=True,
         save=True,
         save_period=config.get('output', {}).get('save_period', 10),
@@ -174,7 +174,7 @@ def train(
     )
 
     print(f"\n{'='*60}")
-    print("Training abgeschlossen!")
+    print("Training finished!")
     print(f"Best Model: {project}/{name}/weights/best.pt")
     print(f"{'='*60}\n")
 
@@ -183,48 +183,48 @@ def train(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='YOLO26 Training für Dartboard Detection'
+        description='YOLO26 Training for Dartboard Detection'
     )
 
-    # Erforderliche Argumente
+    # Required arguments
     parser.add_argument(
         '--data', '-d',
         type=str,
         default='datasets/dataset_0_yolo/dataset.yaml',
-        help='Pfad zur Dataset YAML'
+        help='Path to dataset YAML'
     )
 
-    # Optionale Argumente
+    # Optional arguments
     parser.add_argument(
         '--config', '-c',
         type=str,
         default='configs/train_config.yaml',
-        help='Pfad zur Training-Config'
+        help='Path to training config'
     )
     parser.add_argument(
         '--model', '-m',
         type=str,
         default='yolo26n',
         choices=['yolo26n', 'yolo26s', 'yolo26m', 'yolo26l', 'yolo26x'],
-        help='Modellgröße'
+        help='Model size'
     )
     parser.add_argument(
         '--epochs', '-e',
         type=int,
         default=100,
-        help='Anzahl Epochen'
+        help='Number of epochs'
     )
     parser.add_argument(
         '--batch', '-b',
         type=int,
         default=16,
-        help='Batch-Größe'
+        help='Batch size'
     )
     parser.add_argument(
         '--imgsz',
         type=int,
         default=800,
-        help='Input-Bildgröße'
+        help='Input image size'
     )
     parser.add_argument(
         '--device',
@@ -236,23 +236,23 @@ def main():
         '--project',
         type=str,
         default='runs/train',
-        help='Ausgabe-Ordner'
+        help='Output folder'
     )
     parser.add_argument(
         '--name',
         type=str,
         default=None,
-        help='Experiment-Name'
+        help='Experiment name'
     )
     parser.add_argument(
         '--resume',
         action='store_true',
-        help='Training fortsetzen'
+        help='Resume training'
     )
     parser.add_argument(
         '--no-pretrained',
         action='store_true',
-        help='Ohne pretrained Weights'
+        help='Without pretrained weights'
     )
     parser.add_argument(
         '--patience',
@@ -269,12 +269,12 @@ def main():
 
     args = parser.parse_args()
 
-    # Pfade relativ zum Script-Verzeichnis auflösen
+    # Resolve paths relative to script directory
     script_dir = Path(__file__).parent.parent
     data_path = script_dir / args.data
     config_path = script_dir / args.config if args.config else None
 
-    # Training starten
+    # Start training
     train(
         dataset_yaml=str(data_path),
         config_path=str(config_path) if config_path else None,

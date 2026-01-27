@@ -1,7 +1,7 @@
 """
 Visualization Utilities
 
-Funktionen zum Zeichnen von Predictions und Dartboard-Overlays.
+Functions for drawing predictions and dartboard overlays.
 """
 
 import cv2
@@ -10,17 +10,17 @@ from typing import List, Tuple, Dict, Optional
 from pathlib import Path
 
 
-# Farben (BGR Format für OpenCV)
+# Colors (BGR format for OpenCV)
 COLORS = {
-    'dart': (0, 255, 255),       # Gelb/Cyan
-    'cal_center': (0, 255, 0),   # Grün
-    'cal_k1': (255, 0, 0),       # Blau
-    'cal_k2': (255, 0, 0),       # Blau
-    'cal_k3': (255, 0, 0),       # Blau
-    'cal_k4': (255, 0, 0),       # Blau
+    'dart': (0, 255, 255),       # Yellow/Cyan
+    'cal_center': (0, 255, 0),   # Green
+    'cal_k1': (255, 0, 0),       # Blue
+    'cal_k2': (255, 0, 0),       # Blue
+    'cal_k3': (255, 0, 0),       # Blue
+    'cal_k4': (255, 0, 0),       # Blue
     'bbox': (0, 165, 255),       # Orange
-    'text': (255, 255, 255),     # Weiß
-    'board_rings': (128, 128, 128),  # Grau
+    'text': (255, 255, 255),     # White
+    'board_rings': (128, 128, 128),  # Gray
 }
 
 CLASS_NAMES = {
@@ -43,26 +43,26 @@ def draw_keypoint(
     label: Optional[str] = None
 ) -> np.ndarray:
     """
-    Zeichnet einen Keypoint auf das Bild.
+    Draws a keypoint on the image.
 
     Args:
-        img: Bild (wird modifiziert)
-        x, y: Normalisierte Koordinaten (0-1)
-        color: BGR Farbe
-        radius: Punkt-Radius
-        thickness: -1 für gefüllt
-        label: Optional Label-Text
+        img: Image (will be modified)
+        x, y: Normalized coordinates (0-1)
+        color: BGR color
+        radius: Point radius
+        thickness: -1 for filled
+        label: Optional label text
 
     Returns:
-        Modifiziertes Bild
+        Modified image
     """
     h, w = img.shape[:2]
     px, py = int(x * w), int(y * h)
 
-    # Punkt zeichnen
+    # Draw point
     cv2.circle(img, (px, py), radius, color, thickness)
 
-    # Label zeichnen
+    # Draw label
     if label:
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.5
@@ -82,31 +82,31 @@ def draw_bbox(
     label: Optional[str] = None
 ) -> np.ndarray:
     """
-    Zeichnet eine Bounding Box auf das Bild.
+    Draws a bounding box on the image.
 
     Args:
-        img: Bild (wird modifiziert)
-        x_center, y_center: Normalisierte Zentrum-Koordinaten
-        width, height: Normalisierte Größe
-        color: BGR Farbe
-        thickness: Liniendicke
-        label: Optional Label-Text
+        img: Image (will be modified)
+        x_center, y_center: Normalized center coordinates
+        width, height: Normalized dimensions
+        color: BGR color
+        thickness: Line thickness
+        label: Optional label text
 
     Returns:
-        Modifiziertes Bild
+        Modified image
     """
     h, w = img.shape[:2]
 
-    # Konvertiere zu Pixel-Koordinaten
+    # Convert to pixel coordinates
     x1 = int((x_center - width / 2) * w)
     y1 = int((y_center - height / 2) * h)
     x2 = int((x_center + width / 2) * w)
     y2 = int((y_center + height / 2) * h)
 
-    # Box zeichnen
+    # Draw box
     cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
 
-    # Label zeichnen
+    # Draw label
     if label:
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.4
@@ -126,21 +126,21 @@ def draw_predictions(
     scores: Optional[List[str]] = None
 ) -> np.ndarray:
     """
-    Zeichnet YOLO-Detections auf ein Bild.
+    Draws YOLO detections on an image.
 
     Args:
-        img: Eingabebild
-        detections: Liste von Detections, jede mit:
+        img: Input image
+        detections: List of detections, each with:
                    - class_id: int
-                   - x_center, y_center, width, height: float (normalisiert)
+                   - x_center, y_center, width, height: float (normalized)
                    - confidence: float
-        draw_boxes: Bounding Boxes zeichnen
-        draw_points: Keypoints zeichnen
-        draw_labels: Labels zeichnen
-        scores: Optional Liste von Score-Strings für Darts
+        draw_boxes: Draw bounding boxes
+        draw_points: Draw keypoints
+        draw_labels: Draw labels
+        scores: Optional list of score strings for darts
 
     Returns:
-        Bild mit eingezeichneten Detections
+        Image with drawn detections
     """
     img = img.copy()
     dart_idx = 0
@@ -159,9 +159,9 @@ def draw_predictions(
             label = f"{class_name} {conf:.2f}" if draw_labels else None
             draw_bbox(img, x, y, w, h, color, thickness=1, label=label)
 
-        # Keypoint (Zentrum der Box)
+        # Keypoint (Center of the box)
         if draw_points:
-            # Score-Label für Darts
+            # Score label for darts
             if class_id == 0 and scores and dart_idx < len(scores):
                 point_label = scores[dart_idx]
                 dart_idx += 1
@@ -183,26 +183,26 @@ def draw_dartboard_overlay(
     thickness: int = 1
 ) -> np.ndarray:
     """
-    Zeichnet ein Dartboard-Overlay (Ringe und Segmentlinien).
+    Draws a dartboard overlay (rings and segment lines).
 
     Args:
-        img: Eingabebild
-        center: Normalisiertes Zentrum (x, y)
-        radius: Normalisierter Radius (Double-Ring)
-        color: BGR Farbe
-        thickness: Liniendicke
+        img: Input image
+        center: Normalized center (x, y)
+        radius: Normalized radius (Double Ring)
+        color: BGR color
+        thickness: Line thickness
 
     Returns:
-        Bild mit Dartboard-Overlay
+        Image with dartboard overlay
     """
     img = img.copy()
     h, w = img.shape[:2]
 
-    # Pixel-Koordinaten
+    # Pixel coordinates
     cx, cy = int(center[0] * w), int(center[1] * h)
     r_px = int(radius * min(w, h))
 
-    # Radien-Verhältnisse (BDO Standard)
+    # Radii ratios (BDO Standard)
     ratios = {
         'double_outer': 1.0,
         'double_inner': 0.941,
@@ -212,14 +212,14 @@ def draw_dartboard_overlay(
         'inner_bull': 0.037,
     }
 
-    # Ringe zeichnen
+    # Draw rings
     for name, ratio in ratios.items():
         r = int(r_px * ratio)
         cv2.circle(img, (cx, cy), r, color, thickness)
 
-    # Segment-Linien (alle 18°)
+    # Segment lines (every 18 degrees)
     for i in range(20):
-        angle = np.radians(i * 18 - 9)  # -9° Offset für Segmentgrenzen
+        angle = np.radians(i * 18 - 9)  # -9° offset for segment boundaries
         x_inner = int(cx + r_px * ratios['outer_bull'] * np.sin(angle))
         y_inner = int(cy - r_px * ratios['outer_bull'] * np.cos(angle))
         x_outer = int(cx + r_px * np.sin(angle))
@@ -237,21 +237,21 @@ def draw_ground_truth_comparison(
     gt_color: Tuple[int, int, int] = (0, 0, 255)
 ) -> np.ndarray:
     """
-    Zeichnet Predictions und Ground Truth zum Vergleich.
+    Draws predictions and ground truth for comparison.
 
     Args:
-        img: Eingabebild
-        predictions: Liste von Predictions
-        ground_truth: Liste von Ground Truth Detections
-        pred_color: Farbe für Predictions (default: Grün)
-        gt_color: Farbe für Ground Truth (default: Rot)
+        img: Input image
+        predictions: List of predictions
+        ground_truth: List of ground truth detections
+        pred_color: Color for predictions (default: Green)
+        gt_color: Color for ground truth (default: Red)
 
     Returns:
-        Vergleichsbild
+        Comparison image
     """
     img = img.copy()
 
-    # Ground Truth (als X)
+    # Ground Truth (as X)
     for gt in ground_truth:
         x, y = gt['x_center'], gt['y_center']
         h, w = img.shape[:2]
@@ -260,14 +260,14 @@ def draw_ground_truth_comparison(
         cv2.line(img, (px - size, py - size), (px + size, py + size), gt_color, 2)
         cv2.line(img, (px - size, py + size), (px + size, py - size), gt_color, 2)
 
-    # Predictions (als Kreis)
+    # Predictions (as Circle)
     for pred in predictions:
         x, y = pred['x_center'], pred['y_center']
         h, w = img.shape[:2]
         px, py = int(x * w), int(y * h)
         cv2.circle(img, (px, py), 6, pred_color, 2)
 
-    # Legende
+    # Legend
     cv2.putText(img, "Pred (O)", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, pred_color, 2)
     cv2.putText(img, "GT (X)", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, gt_color, 2)
 
@@ -281,13 +281,13 @@ def save_prediction_image(
     scores: Optional[List[str]] = None
 ) -> None:
     """
-    Speichert ein Bild mit eingezeichneten Predictions.
+    Saves an image with drawn predictions.
 
     Args:
-        img: Eingabebild
-        output_path: Ausgabepfad
-        detections: Liste von Detections
-        scores: Optional Liste von Score-Strings
+        img: Input image
+        output_path: Output path
+        detections: List of detections
+        scores: Optional list of score strings
     """
     result = draw_predictions(img, detections, scores=scores)
     output_path.parent.mkdir(parents=True, exist_ok=True)
