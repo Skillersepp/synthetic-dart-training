@@ -1,0 +1,88 @@
+# ============================================
+# YOLO26 Training Configuration
+# ============================================
+
+# ----- Model -----
+model:
+  name: yolo26n  # yolo26n, yolo26s, yolo26m, yolo26l, yolo26x
+  pretrained: true
+  weights: null  # Pfad zu eigenen Weights, oder null für pretrained
+
+# ----- Training -----
+training:
+  epochs: 100
+  batch_size: 16
+  imgsz: 800  # Input-Größe (wie DeepDarts)
+  patience: 20  # Early Stopping
+
+  # Optimizer
+  optimizer: AdamW  # SGD, Adam, AdamW
+  lr0: 0.001  # Initial Learning Rate
+  lrf: 0.01  # Final LR = lr0 * lrf
+  momentum: 0.937
+  weight_decay: 0.0005
+
+  # Warmup
+  warmup_epochs: 3
+  warmup_momentum: 0.8
+  warmup_bias_lr: 0.1
+
+# ----- Augmentation -----
+# Geometrische Augmentations sind DEAKTIVIERT
+# Hintergrund-Augmentation wird separat via augment_backgrounds.py gemacht
+augmentation:
+  # Geometrisch (DEAKTIVIERT)
+  degrees: 0.0  # Rotation aus
+  translate: 0.0  # Translation aus
+  scale: 0.0  # Scale aus
+  shear: 0.0  # Shear aus
+  perspective: 0.0  # Perspektive aus
+  flipud: 0.0  # Vertical Flip aus
+  fliplr: 0.0  # Horizontal Flip aus
+
+  # Farbe (leichte Variation erlaubt)
+  hsv_h: 0.01  # Hue (minimal)
+  hsv_s: 0.2  # Saturation
+  hsv_v: 0.2  # Value/Helligkeit
+
+  # Advanced (deaktiviert)
+  mosaic: 0.0  # Deaktiviert - nicht sinnvoll für Dartboards
+  mixup: 0.0  # Deaktiviert
+  copy_paste: 0.0  # Deaktiviert
+
+# ----- Loss -----
+loss:
+  box: 7.5  # Box Loss Gewichtung
+  cls: 0.5  # Classification Loss
+  dfl: 1.5  # Distribution Focal Loss
+
+# ----- Validation -----
+validation:
+  val_interval: 1  # Alle N Epochs validieren
+  conf_threshold: 0.25
+  iou_threshold: 0.7
+
+# ----- Hardware -----
+hardware:
+  device: null  # null = auto, oder "0", "0,1", "cpu"
+  workers: 2
+  amp: true  # Automatic Mixed Precision
+
+# ----- Dartboard Spezifisch -----
+dartboard:
+  # BBox-Größe für Keypoints (Fraction der Bildgröße)
+  keypoint_bbox_size: 0.025  # 2.5% wie DeepDarts = 20px bei 800px
+
+  # Board-Geometrie (BDO Standard, in Metern)
+  r_double: 0.170
+  r_treble: 0.1074
+  r_outer_bull: 0.0159
+  r_inner_bull: 0.00635
+  w_ring: 0.01  # Breite Double/Treble Ring
+
+# ----- Output -----
+output:
+  project: runs/train
+  name: dartboard_yolo26
+  save_period: 10  # Checkpoint alle N Epochs
+  plots: true

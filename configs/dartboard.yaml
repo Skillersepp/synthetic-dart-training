@@ -1,0 +1,29 @@
+# ============================================
+# YOLO26 Dartboard Detection Configuration
+# ============================================
+# Dieser Config verwendet den DeepDarts-Ansatz:
+# Keypoints werden als kleine Bounding Boxes behandelt
+
+# Dataset Pfade (werden vom Konverter-Script erstellt)
+path: ../datasets/dataset_0_yolo  # Dataset Root
+train: images/train
+val: images/val
+test: images/test
+
+# Klassen
+# 0: Dart (Keypoint wo die Spitze steckt)
+# 1: Dartboard_Center (Neuer Kalibrationspunkt)
+# 2: Dartboard_K1 (Kalibrierung oben - Richtung 20)
+# 3: Dartboard_K2 (Kalibrierung unten - Richtung 3)
+# 4: Dartboard_K3 (Kalibrierung links - Richtung 6)
+# 5: Dartboard_K4 (Kalibrierung rechts - Richtung 11)
+
+names:
+  0: dart
+  1: cal_center
+  2: cal_k1
+  3: cal_k2
+  4: cal_k3
+  5: cal_k4
+
+nc: 6  # Number of classes

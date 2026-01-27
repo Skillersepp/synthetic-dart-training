@@ -1,0 +1,39 @@
+# YOLO26 Dart Detection Framework
+# Python 3.10+ empfohlen
+#
+# Installation:
+#   pip install -r requirements.txt
+#
+# Falls CUDA nicht erkannt wird, manuell installieren:
+#   pip install torch==2.9.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+# ===== PyTorch mit CUDA 12.8 =====
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.9.1
+torchvision
+torchaudio
+
+# ===== YOLO26 =====
+ultralytics>=8.4.0
+
+# ===== Data Processing =====
+numpy>=1.24.0
+pandas>=2.0.0
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# ===== Configuration =====
+PyYAML>=6.0
+
+# ===== Visualization & Logging =====
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tensorboard>=2.14.0
+tqdm>=4.65.0
+
+# ===== Evaluation =====
+scikit-learn>=1.3.0
+
+# ===== Datasets (für auto-download Hintergründe) =====
+datasets>=2.14.0
+huggingface_hub>=0.16.0
