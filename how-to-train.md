@@ -71,6 +71,11 @@ cd YOLO26
 pip install -r requirements.txt
 ```
 
+### 2.1 Test for GPU/CUDA support
+```bash
+python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}')"
+```
+
 ### 3. Test YOLO26
 
 ```python

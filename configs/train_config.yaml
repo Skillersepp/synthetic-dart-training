@@ -65,7 +65,7 @@ validation:
 # ----- Hardware -----
 hardware:
   device: null  # null = auto, oder "0", "0,1", "cpu"
-  workers: 2
+  workers: 4
   amp: true  # Automatic Mixed Precision
 
 # ----- Dartboard Spezifisch -----

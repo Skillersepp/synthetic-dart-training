@@ -84,10 +84,10 @@ def detections_to_keypoints(detections: List[Dict]) -> Dict:
         detections: List of detections
 
     Returns:
-        Dictionary with 'darts' and 'calibration' lists
+        Dictionary with 'darts' list and 'calibration' dict
     """
     darts = []
-    calibration = [None] * 5  # [center, k1, k2, k3, k4]
+    calibration = {}
 
     for det in detections:
         class_id = det['class_id']
@@ -95,13 +95,10 @@ def detections_to_keypoints(detections: List[Dict]) -> Dict:
 
         if class_id == 0:  # Dart
             darts.append(point)
-        elif class_id == 1:  # Center
-            calibration[0] = point
-        elif 2 <= class_id <= 5:  # K1-K4
-            calibration[class_id - 1] = point
-
-    # Only keep valid calibration points
-    calibration = [p for p in calibration if p is not None]
+        elif class_id in CLASS_NAMES:
+            # Map class_id to name (e.g. 1 -> 'cal_center')
+            name = CLASS_NAMES[class_id]
+            calibration[name] = point
 
     return {
         'darts': darts,
@@ -127,10 +124,26 @@ def load_ground_truth(json_path: Path) -> Dict:
             darts.append((dart['x'], dart['y']))
             dart_scores.append(dart.get('score', 0))
 
-    calibration = []
+    calibration = {}
     if 'dartboard' in data and 'keypoints' in data['dartboard']:
+        # Mapping from JSON names to scorer names
+        name_map = {
+            'Dartboard_Center': 'cal_center',
+            'Dartboard_K1': 'cal_k1',
+            'Dartboard_K2': 'cal_k2',
+            'Dartboard_K3': 'cal_k3',
+            'Dartboard_K4': 'cal_k4',
+            'Dartboard_KT1': 'cal_kt1',
+            'Dartboard_KT2': 'cal_kt2',
+            'Dartboard_KT3': 'cal_kt3',
+            'Dartboard_KT4': 'cal_kt4'
+        }
+        
         for kp in data['dartboard']['keypoints']:
-            calibration.append((kp['x'], kp['y']))
+            json_name = kp.get('name')
+            scorer_name = name_map.get(json_name)
+            if scorer_name:
+                calibration[scorer_name] = (kp['x'], kp['y'])
 
     return {
         'darts': darts,
@@ -213,6 +226,9 @@ def evaluate(
     if output_dir:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+        if write_images:
+            (output_dir / 'correct').mkdir(exist_ok=True)
+            (output_dir / 'incorrect').mkdir(exist_ok=True)
 
     # Collect all images
     image_files = sorted(list(images_dir.glob('*.png')) + list(images_dir.glob('*.jpg')))
@@ -245,11 +261,9 @@ def evaluate(
 
         if len(keypoints['calibration']) >= 4:
             try:
-                has_center = len(keypoints['calibration']) >= 5
                 scores = scorer.calculate_scores(
-                    np.array(keypoints['darts']),
-                    np.array(keypoints['calibration']),
-                    has_center=has_center
+                    keypoints['darts'],
+                    keypoints['calibration']
                 )
                 pred_score = sum(s[1] for s in scores)
                 score_strings = [s[0] for s in scores]
@@ -272,12 +286,18 @@ def evaluate(
         if write_images and output_dir:
             result_img = draw_predictions(img, detections, scores=score_strings)
 
+            # Determine color based on correctness
+            is_correct = (pred_score == gt_score)
+            color = (0, 255, 0) if is_correct else (0, 0, 255)
+
             # Add Score Info
             text = f"Pred: {pred_score} | GT: {gt_score}"
             cv2.putText(result_img, text, (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
-            cv2.imwrite(str(output_dir / img_path.name), result_img)
+            # Save to appropriate folder
+            subfolder = 'correct' if is_correct else 'incorrect'
+            cv2.imwrite(str(output_dir / subfolder / img_path.name), result_img)
 
     # Calculate metrics
     pcs = calculate_pcs(results['pred_scores'], results['gt_scores'])
