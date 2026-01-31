@@ -182,6 +182,46 @@ def predict_single(
     return detections, img
 
 
+from collections import Counter
+
+# ...
+
+def match_points(pred_points: List[Tuple[float, float]], gt_points: List[Tuple[float, float]], threshold: float = 0.05):
+    """
+    Greedy matching of predicted points to ground truth points.
+    
+    Returns:
+        matches: List of (pred_idx, gt_idx)
+        unmatched_pred: List of pred_idx
+        unmatched_gt: List of gt_idx
+    """
+    matches = []
+    used_pred = set()
+    used_gt = set()
+    
+    # Calculate all distances
+    candidates = []
+    for i, p in enumerate(pred_points):
+        for j, g in enumerate(gt_points):
+            dist = np.sqrt((p[0]-g[0])**2 + (p[1]-g[1])**2)
+            if dist <= threshold:
+                candidates.append((dist, i, j))
+    
+    # Sort by distance (greedy best match first)
+    candidates.sort(key=lambda x: x[0])
+    
+    for _, i, j in candidates:
+        if i not in used_pred and j not in used_gt:
+            matches.append((i, j))
+            used_pred.add(i)
+            used_gt.add(j)
+            
+    unmatched_pred = [i for i in range(len(pred_points)) if i not in used_pred]
+    unmatched_gt = [j for j in range(len(gt_points)) if j not in used_gt]
+    
+    return matches, unmatched_pred, unmatched_gt
+
+
 def evaluate(
     model_path: str,
     data_dir: str,
@@ -222,6 +262,11 @@ def evaluate(
     if not images_dir.exists():
         raise FileNotFoundError(f"Images not found: {images_dir}")
 
+    if not original_labels_dir.exists():
+        print(f"\nWARNING: Original (JSON) labels not found at: {original_labels_dir}")
+        print("Ground Truth scores and metrics using GT will be 0.")
+        print("Please ensure the original dataset folder (parent of _yolo folder) exists and contains 'labels'.\n")
+
     # Output folder
     if output_dir:
         output_dir = Path(output_dir)
@@ -243,7 +288,11 @@ def evaluate(
         'ground_truth': [],
         'pred_scores': [],
         'gt_scores': [],
-        'errors': []
+        'errors': [],
+        # Detailed stats
+        'dart_tp': 0, 'dart_fp': 0, 'dart_fn': 0,
+        'score_matches_correct': 0, 'score_matches_total': 0,
+        'mistakes': Counter()
     }
 
     for img_path in tqdm(image_files, desc=f"Evaluating {split}"):
@@ -254,10 +303,12 @@ def evaluate(
 
         # Extract Keypoints
         keypoints = detections_to_keypoints(detections)
+        pred_darts = keypoints['darts']
 
         # Calculate score (if enough calibration points)
         pred_score = 0
-        score_strings = []
+        score_strings = [] # ordered by darts
+        individual_scores = [] # (str, val) tuples
 
         if len(keypoints['calibration']) >= 4:
             try:
@@ -267,16 +318,51 @@ def evaluate(
                 )
                 pred_score = sum(s[1] for s in scores)
                 score_strings = [s[0] for s in scores]
+                individual_scores = scores
             except Exception as e:
+                # If scoring fails, we have 0 scores/strings
                 if verbose:
                     print(f"Score error at {img_path.name}: {e}")
+                
+                # Fill with empty/zeros for length consistency if needed,
+                # but basically scoring failed. 
+                individual_scores = [("?", 0)] * len(pred_darts)
+        else:
+            individual_scores = [("?", 0)] * len(pred_darts)
 
         # Load Ground Truth (if available)
         gt_score = 0
+        gt_darts = []
+        gt_dart_scores = []
+        
         json_path = original_labels_dir / f"{img_path.stem}.json"
         if json_path.exists():
             gt_data = load_ground_truth(json_path)
             gt_score = gt_data['total_score']
+            gt_darts = gt_data['darts'] # list of (x,y)
+            gt_dart_scores = gt_data['dart_scores'] # list of ints
+
+        # --- Detailed Analysis ---
+        matches, unmatched_pred, unmatched_gt = match_points(pred_darts, gt_darts)
+        
+        results['dart_tp'] += len(matches)
+        results['dart_fp'] += len(unmatched_pred)
+        results['dart_fn'] += len(unmatched_gt)
+        
+        # Analyze Score Accuracy for Matched Darts
+        for pred_idx, gt_idx in matches:
+            results['score_matches_total'] += 1
+            
+            p_val = individual_scores[pred_idx][1] if pred_idx < len(individual_scores) else 0
+            g_val = gt_dart_scores[gt_idx] if gt_idx < len(gt_dart_scores) else 0
+            
+            if p_val == g_val:
+                results['score_matches_correct'] += 1
+            else:
+                p_str = individual_scores[pred_idx][0] if pred_idx < len(individual_scores) else "?"
+                results['mistakes'][(g_val, p_val)] += 1
+
+        # -------------------------
 
         results['pred_scores'].append(pred_score)
         results['gt_scores'].append(gt_score)
@@ -302,13 +388,27 @@ def evaluate(
     # Calculate metrics
     pcs = calculate_pcs(results['pred_scores'], results['gt_scores'])
     mase = calculate_mase(results['pred_scores'], results['gt_scores'])
+    
+    # Detection Metrics
+    tp = results['dart_tp']
+    fp = results['dart_fp']
+    fn = results['dart_fn']
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    
+    # Scoring Metrics
+    score_acc = results['score_matches_correct'] / results['score_matches_total'] * 100 if results['score_matches_total'] > 0 else 0
 
     metrics = {
         'split': split,
         'num_images': len(image_files),
         'PCS': pcs,
         'MASE': mase,
-        'errors': results['errors']
+        'errors': results['errors'],
+        'precision': precision,
+        'recall': recall,
+        'f1': f1
     }
 
     # Output
@@ -316,8 +416,28 @@ def evaluate(
     print(f"Evaluation Results ({split})")
     print(f"{'='*50}")
     print(f"Images:                    {metrics['num_images']}")
-    print(f"Percent Correct Score:     {pcs:.1f}%")
-    print(f"Mean Absolute Score Error: {mase:.2f}")
+    print(f"{'-'*50}")
+    print(f"TOTAL SCORE METRICS:")
+    print(f"  Percent Correct Score:     {pcs:.1f}%")
+    print(f"  Mean Absolute Score Error: {mase:.2f}")
+    print(f"{'-'*50}")
+    print(f"DART DETECTION METRICS:")
+    print(f"  True Positives (TP):       {tp}")
+    print(f"  False Positives (FP):      {fp}")
+    print(f"  False Negatives (FN):      {fn}")
+    print(f"  Precision:                 {precision:.3f}")
+    print(f"  Recall:                    {recall:.3f}")
+    print(f"  F1-Score:                  {f1:.3f}")
+    print(f"{'-'*50}")
+    print(f"SCORING ACCURACY (matched darts):")
+    print(f"  Correctly scored darts:    {results['score_matches_correct']}/{results['score_matches_total']} ({score_acc:.1f}%)")
+    print(f"{'-'*50}")
+    
+    if results['mistakes']:
+        print("MOST COMMON MISTAKES (Ground Truth -> Predicted):")
+        for (gt_val, pred_val), count in results['mistakes'].most_common(10):
+            print(f"  {gt_val} -> {pred_val}: {count} times")
+    
     print(f"{'='*50}\n")
 
     return metrics
@@ -349,11 +469,9 @@ def predict_image(
     score_info = {'scores': [], 'total': 0}
     if len(keypoints['calibration']) >= 4:
         try:
-            has_center = len(keypoints['calibration']) >= 5
             scores = scorer.calculate_scores(
-                np.array(keypoints['darts']),
-                np.array(keypoints['calibration']),
-                has_center=has_center
+                keypoints['darts'],
+                keypoints['calibration']
             )
             score_info = {
                 'scores': [(s[0], s[1]) for s in scores],
@@ -427,17 +545,49 @@ def main():
             write_images=args.write
         )
     elif args.command == 'predict':
-        result = predict_image(
-            model_path=args.model,
-            image_path=args.image,
-            conf_threshold=args.conf,
-            output_path=args.output,
-            show=args.show
-        )
-        print(f"\nResult:")
-        print(f"  Darts found: {len(result['keypoints']['darts'])}")
-        print(f"  Calibration points: {len(result['keypoints']['calibration'])}")
-        print(f"  Scores: {result['scores']}")
+        input_path = Path(args.image)
+        output_path = Path(args.output) if args.output else None
+
+        # Determine input images
+        if input_path.is_dir():
+            image_files = sorted(list(input_path.glob('*.png')) + list(input_path.glob('*.jpg')) + list(input_path.glob('*.jpeg')))
+            if not image_files:
+                print(f"No images found in {input_path}")
+                return
+            print(f"Processing {len(image_files)} images from {input_path}...")
+        else:
+            image_files = [input_path]
+
+        # Process images
+        if output_path and args.output: # Handle output directory creation if multiple images or looks like dir
+            if input_path.is_dir() or (not output_path.suffix):
+                output_path.mkdir(parents=True, exist_ok=True)
+
+        for img_file in (tqdm(image_files, desc="Predicting") if len(image_files) > 1 else image_files):
+            # Determine output file path
+            out_file = None
+            if output_path:
+                if output_path.is_dir():
+                    # Save as pred_[filename] in output directory
+                    out_file = output_path / f"pred_{img_file.name}"
+                else:
+                    # Explicit filename (only valid for single input, technically)
+                    out_file = output_path
+
+            result = predict_image(
+                model_path=args.model,
+                image_path=str(img_file),
+                conf_threshold=args.conf,
+                output_path=str(out_file) if out_file else None,
+                show=args.show
+            )
+            
+            if len(image_files) == 1:
+                print(f"\nResult for {img_file.name}:")
+                print(f"  Darts found: {len(result['keypoints']['darts'])}")
+                print(f"  Calibration points: {len(result['keypoints']['calibration'])}")
+                print(f"  Scores: {result['scores']}")
+
     else:
         parser.print_help()
 

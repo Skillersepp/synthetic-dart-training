@@ -12,11 +12,17 @@ test: images/test
 
 # Klassen
 # 0: Dart (Keypoint wo die Spitze steckt)
-# 1: Dartboard_Center (Neuer Kalibrationspunkt)
-# 2: Dartboard_K1 (Kalibrierung oben - Richtung 20)
-# 3: Dartboard_K2 (Kalibrierung unten - Richtung 3)
-# 4: Dartboard_K3 (Kalibrierung links - Richtung 6)
-# 5: Dartboard_K4 (Kalibrierung rechts - Richtung 11)
+# 1: Dartboard_Center (Kalibrationspunkt im Zentrum)
+# 2-5: Dartboard_K1-K4 (Kalibrierung auf Double Ring, äußere Kante)
+#   - K1: Oben (Richtung 20)
+#   - K2: Unten (Richtung 3)
+#   - K3: Links (Richtung 6)
+#   - K4: Rechts (Richtung 11)
+# 6-9: Dartboard_KT1-KT4 (Kalibrierung auf Triple Ring, äußere Kante)
+#   - KT1: Oben (Richtung 20)
+#   - KT2: Unten (Richtung 3)
+#   - KT3: Links (Richtung 6)
+#   - KT4: Rechts (Richtung 11)
 
 names:
   0: dart
@@ -25,5 +31,9 @@ names:
   3: cal_k2
   4: cal_k3
   5: cal_k4
+  6: cal_kt1
+  7: cal_kt2
+  8: cal_kt3
+  9: cal_kt4
 
-nc: 6  # Number of classes
+nc: 10  # Number of classes (1 Dart + 1 Center + 4 Double + 4 Triple)

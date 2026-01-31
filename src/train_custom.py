@@ -27,6 +27,12 @@ except ImportError:
 from dataset import DartboardDataset, BackgroundProvider
 
 
+def load_config(config_path: Path) -> dict:
+    """Loads the training configuration."""
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
+
+
 def train_one_epoch(
     model,
     dataloader,
@@ -69,19 +75,58 @@ def main():
         description='Custom Training with On-The-Fly Background Augmentation'
     )
 
+    parser.add_argument('--config', '-c', default='configs/train_config.yaml', help='Path to training config')
     parser.add_argument('--images', '-i', required=True, help='Images folder (PNG with transparency)')
     parser.add_argument('--labels', '-l', required=True, help='Labels folder (YOLO TXT)')
     parser.add_argument('--backgrounds', '-b', default=None, help='Backgrounds folder or "imagenet"/"coco"/"textures"')
-    parser.add_argument('--model', '-m', default='yolo26n', help='Model (yolo26n/s/m/l/x)')
-    parser.add_argument('--epochs', '-e', type=int, default=100, help='Number of epochs')
-    parser.add_argument('--batch', type=int, default=16, help='Batch size')
-    parser.add_argument('--imgsz', type=int, default=800, help='Image size')
-    parser.add_argument('--lr', type=float, default=0.001, help='Learning Rate')
-    parser.add_argument('--device', default='0', help='Device (0, 0,1, cpu)')
-    parser.add_argument('--workers', type=int, default=4, help='DataLoader Workers')
+    parser.add_argument('--model', '-m', default=None, help='Model (yolo26n/s/m/l/x)')
+    parser.add_argument('--epochs', '-e', type=int, default=None, help='Number of epochs')
+    parser.add_argument('--batch', type=int, default=None, help='Batch size')
+    parser.add_argument('--imgsz', type=int, default=None, help='Image size')
+    parser.add_argument('--lr', type=float, default=None, help='Learning Rate')
+    parser.add_argument('--device', default=None, help='Device (0, 0,1, cpu)')
+    parser.add_argument('--workers', type=int, default=None, help='DataLoader Workers')
     parser.add_argument('--output', '-o', default='runs/train_custom', help='Output folder')
 
     args = parser.parse_args()
+
+    # Resolve paths relative to script directory
+    script_dir = Path(__file__).parent.parent
+    config_path = script_dir / args.config if args.config else None
+
+    # Load Config
+    config = {}
+    if config_path and Path(config_path).exists():
+        config = load_config(Path(config_path))
+        print(f"Config loaded: {config_path}")
+
+    # 1. Defaults
+    default_epochs = 100
+    default_batch = 16
+    default_imgsz = 800
+    default_lr = 0.001
+    default_device = '0'
+    default_workers = 4
+    default_model = 'yolo26n'
+
+    # 2. Config overrides Defaults
+    training_cfg = config.get('training', {})
+    model_cfg = config.get('model', {})
+    
+    cfg_epochs = training_cfg.get('epochs', default_epochs)
+    cfg_batch = training_cfg.get('batch_size', default_batch)
+    cfg_imgsz = training_cfg.get('imgsz', default_imgsz)
+    cfg_lr = training_cfg.get('lr0', default_lr)
+    cfg_model = model_cfg.get('name', default_model)
+    
+    # 3. CLI Args override Config
+    epochs = args.epochs if args.epochs is not None else cfg_epochs
+    batch_size = args.batch if args.batch is not None else cfg_batch
+    imgsz = args.imgsz if args.imgsz is not None else cfg_imgsz
+    lr = args.lr if args.lr is not None else cfg_lr
+    model_name = args.model if args.model is not None else cfg_model
+    device_arg = args.device if args.device is not None else default_device
+    workers = args.workers if args.workers is not None else default_workers
 
     print("=" * 60)
     print("Custom Training with Background Augmentation")
@@ -89,16 +134,18 @@ def main():
     print(f"Images:      {args.images}")
     print(f"Labels:      {args.labels}")
     print(f"Backgrounds: {args.backgrounds or 'Generated'}")
-    print(f"Model:       {args.model}")
-    print(f"Epochs:      {args.epochs}")
-    print(f"Batch Size:  {args.batch}")
+    print(f"Model:       {model_name}")
+    print(f"Epochs:      {epochs}")
+    print(f"Batch Size:  {batch_size}")
+    print(f"Image Size:  {imgsz}")
+    print(f"Learning Rate: {lr}")
     print("=" * 60)
 
     # Device
-    if args.device == 'cpu':
+    if device_arg == 'cpu':
         device = torch.device('cpu')
     else:
-        device = torch.device(f'cuda:{args.device.split(",")[0]}')
+        device = torch.device(f'cuda:{device_arg.split(",")[0]}')
 
     print(f"Device: {device}")
 
@@ -107,15 +154,15 @@ def main():
         images_dir=args.images,
         labels_dir=args.labels,
         background_source=args.backgrounds,
-        img_size=args.imgsz,
+        img_size=imgsz,
         augment=True
     )
 
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=args.batch,
+        batch_size=batch_size,
         shuffle=True,
-        num_workers=args.workers,
+        num_workers=workers,
         pin_memory=True,
         collate_fn=lambda batch: {
             'images': torch.stack([item['image'] for item in batch]),
@@ -127,8 +174,8 @@ def main():
     print(f"Dataset: {len(dataset)} images")
 
     # Load Model
-    model = YOLO(f'{args.model}.pt')
-    print(f"Model loaded: {args.model}")
+    model = YOLO(f'{model_name}.pt')
+    print(f"Model loaded: {model_name}")
 
     # NOTE: For real training with YOLO it is better to
     # process images beforehand (augment_backgrounds.py)

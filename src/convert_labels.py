@@ -32,6 +32,7 @@ except ImportError:
 
 
 # Class Mapping
+# Automatisch erweitert für beliebig viele Kalibrationspunkte
 CLASS_MAPPING = {
     'dart': 0,
     'Dartboard_Center': 1,
@@ -39,6 +40,11 @@ CLASS_MAPPING = {
     'Dartboard_K2': 3,
     'Dartboard_K3': 4,
     'Dartboard_K4': 5,
+    # Neue Kalibrationspunkte auf Triple Ring (äußere Kante)
+    'Dartboard_KT1': 6,  # Triple Ring oben (Richtung 20)
+    'Dartboard_KT2': 7,  # Triple Ring unten (Richtung 3)
+    'Dartboard_KT3': 8,  # Triple Ring links (Richtung 6)
+    'Dartboard_KT4': 9,  # Triple Ring rechts (Richtung 11)
 }
 
 
@@ -46,6 +52,51 @@ def load_json_label(json_path: Path) -> Dict:
     """Loads a JSON label file."""
     with open(json_path, 'r') as f:
         return json.load(f)
+
+
+def discover_keypoint_classes(input_labels_dir: Path) -> Dict[str, int]:
+    """
+    Automatisch alle Keypoint-Klassen aus dem Datensatz extrahieren.
+
+    Scannt die ersten N JSON-Dateien und sammelt alle einzigartigen Keypoint-Namen.
+    Nützlich, wenn neue Kalibrationspunkte hinzugefügt werden.
+
+    Args:
+        input_labels_dir: Pfad zum Labels-Ordner
+
+    Returns:
+        Erweitertes CLASS_MAPPING mit allen gefundenen Keypoints
+    """
+    discovered_keypoints = set()
+
+    # Scanne erste 10 Dateien
+    json_files = sorted(list(input_labels_dir.glob('*.json')))[:10]
+
+    for json_path in json_files:
+        try:
+            data = load_json_label(json_path)
+            if 'dartboard' in data and 'keypoints' in data['dartboard']:
+                for kp in data['dartboard']['keypoints']:
+                    discovered_keypoints.add(kp['name'])
+        except Exception:
+            continue
+
+    # Erstelle erweitertes Mapping
+    extended_mapping = {'dart': 0}
+
+    # Sortiere Keypoints: Center zuerst, dann K-Punkte, dann KT-Punkte, dann Rest
+    sorted_keypoints = sorted(discovered_keypoints, key=lambda x: (
+        0 if 'Center' in x else
+        1 if x.startswith('Dartboard_K') and not x.startswith('Dartboard_KT') else
+        2 if x.startswith('Dartboard_KT') else
+        3,
+        x
+    ))
+
+    for idx, kp_name in enumerate(sorted_keypoints, start=1):
+        extended_mapping[kp_name] = idx
+
+    return extended_mapping
 
 
 def keypoint_to_bbox(x: float, y: float, bbox_size: float) -> Tuple[float, float, float, float]:
@@ -146,7 +197,7 @@ def create_dataset_yaml(
 def apply_background(
     image_path: Path,
     bg_provider,
-    output_size: Tuple[int, int] = (800, 800)
+    output_size: Tuple[int, int] = (1024, 1024)
 ) -> np.ndarray:
     """
     Loads a PNG with transparency and adds a background.
@@ -194,7 +245,9 @@ def convert_dataset(
     seed: int = 42,
     background_source: Optional[str] = None,
     num_variations: int = 1,
-    output_size: int = 800
+    output_size: int = 1024,
+    auto_discover_classes: bool = True,
+    move_files: bool = False
 ) -> Dict[str, int]:
     """
     Converts the entire dataset from JSON to YOLO format.
@@ -205,9 +258,11 @@ def convert_dataset(
         bbox_size: Size of keypoint BBoxes
         train_ratio, val_ratio, test_ratio: Data splits
         seed: Random seed for reproducible splits
-        background_source: Path to background images or None
-        num_variations: Number of variations per image (with different backgrounds)
-        output_size: Output image size
+        background_source: Path to background images or None (ignored if move_files=True)
+        num_variations: Number of variations per image (ignored if move_files=True)
+        output_size: Output image size (ignored if move_files=True)
+        auto_discover_classes: Automatically detect all keypoint classes from dataset
+        move_files: If True, move images instead of copy/transform (saves disk space)
 
     Returns:
         Dictionary with statistics
@@ -215,9 +270,14 @@ def convert_dataset(
     random.seed(seed)
     np.random.seed(seed)
 
-    # Create Background Provider if desired
+    # Create Background Provider if desired (but not in move mode)
     bg_provider = None
-    if background_source and BG_PROVIDER_AVAILABLE:
+    if move_files:
+        if background_source:
+            print("WARNING: Background augmentation disabled in --move mode")
+        if num_variations > 1:
+            print("WARNING: Variations disabled in --move mode (num_variations ignored)")
+    elif background_source and BG_PROVIDER_AVAILABLE:
         from dataset import BackgroundProvider
         bg_provider = BackgroundProvider(
             source=background_source,
@@ -249,6 +309,20 @@ def convert_dataset(
 
     if len(json_files) == 0:
         raise ValueError("No JSON files found!")
+
+    # Auto-discover classes if enabled
+    global CLASS_MAPPING
+    if auto_discover_classes:
+        discovered_mapping = discover_keypoint_classes(input_labels)
+        if len(discovered_mapping) > len(CLASS_MAPPING):
+            print(f"\nAuto-Discovery: Found {len(discovered_mapping)} classes (vs {len(CLASS_MAPPING)} predefined)")
+            print("Discovered classes:")
+            for name, class_id in sorted(discovered_mapping.items(), key=lambda x: x[1]):
+                status = "✓" if name in CLASS_MAPPING else "NEW"
+                print(f"  [{class_id}] {name:25s} {status}")
+            CLASS_MAPPING = discovered_mapping
+        else:
+            print(f"Using predefined CLASS_MAPPING with {len(CLASS_MAPPING)} classes")
 
     # Shuffle and split
     random.shuffle(json_files)
@@ -313,7 +387,11 @@ def convert_dataset(
             n_keypoints = len(yolo_lines) - n_darts
 
             # Number of variations (only for training, val/test get 1)
-            n_vars = num_variations if split == 'train' and bg_provider else 1
+            # In move mode: always 1 (no variations)
+            if move_files:
+                n_vars = 1
+            else:
+                n_vars = num_variations if split == 'train' and bg_provider else 1
 
             for var_idx in range(n_vars):
                 # Filename with variation
@@ -323,7 +401,11 @@ def convert_dataset(
                     out_stem = stem
 
                 # Process image
-                if bg_provider:
+                if move_files:
+                    # Move mode: Just move the file without any transformation
+                    dst_img = output_dir / 'images' / split / f"{out_stem}{img_path.suffix}"
+                    shutil.move(str(img_path), str(dst_img))
+                elif bg_provider:
                     # With background augmentation
                     try:
                         augmented_img = apply_background(
@@ -372,8 +454,14 @@ def main():
     parser.add_argument(
         '--bbox-size',
         type=float,
-        default=0.025,
-        help='Keypoint BBox size (Fraction, default: 0.025 = 2.5%%)'
+        default=None,
+        help='Keypoint BBox size (Fraction, default: from config or 0.025 = 2.5%%)'
+    )
+    parser.add_argument(
+        '--config',
+        type=str,
+        default='configs/train_config.yaml',
+        help='Path to training config (for bbox_size and other settings)'
     )
     parser.add_argument(
         '--train-ratio',
@@ -414,8 +502,18 @@ def main():
     parser.add_argument(
         '--size',
         type=int,
-        default=800,
-        help='Output image size (default: 800)'
+        default=1024,
+        help='Output image size (default: 1024)'
+    )
+    parser.add_argument(
+        '--no-auto-discover',
+        action='store_true',
+        help='Disable automatic class discovery (use predefined CLASS_MAPPING only)'
+    )
+    parser.add_argument(
+        '--move',
+        action='store_true',
+        help='Move files instead of copy (saves disk space, but modifies source dataset!)'
     )
 
     args = parser.parse_args()
@@ -428,30 +526,49 @@ def main():
     if bg_source and not bg_source.startswith('/') and not bg_source.startswith('C:') and bg_source not in ['textures', 'coco', 'imagenet']:
         bg_source = str(script_dir / bg_source)
 
+    # Load config for defaults (if bbox_size not specified)
+    config = {}
+    if args.config:
+        config_path = script_dir / args.config
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+
+    # Get bbox_size from config if not specified
+    bbox_size = args.bbox_size
+    if bbox_size is None:
+        bbox_size = config.get('dartboard', {}).get('keypoint_bbox_size', 0.025)
+
     print("=" * 50)
     print("JSON to YOLO Label Converter")
     print("=" * 50)
     print(f"Input:       {input_dir}")
     print(f"Output:      {output_dir}")
-    print(f"BBox Size:   {args.bbox_size} ({args.bbox_size * 100:.1f}%)")
+    print(f"BBox Size:   {bbox_size} ({bbox_size * 100:.1f}%)")
     print(f"Split:       {args.train_ratio:.0%} / {args.val_ratio:.0%} / {args.test_ratio:.0%}")
-    print(f"Backgrounds: {args.backgrounds or 'None'}")
-    print(f"Variations:  {args.variations}")
-    print(f"Image Size:  {args.size}")
+    print(f"Mode:        {'MOVE (⚠️  source will be modified!)' if args.move else 'COPY'}")
+    if not args.move:
+        print(f"Backgrounds: {args.backgrounds or 'None'}")
+        print(f"Variations:  {args.variations}")
+        print(f"Image Size:  {args.size}")
+    if args.config and config:
+        print(f"Config:      {args.config} (loaded)")
     print("=" * 50)
 
     # Convert
     stats = convert_dataset(
         input_dir=input_dir,
         output_dir=output_dir,
-        bbox_size=args.bbox_size,
+        bbox_size=bbox_size,
         train_ratio=args.train_ratio,
         val_ratio=args.val_ratio,
         test_ratio=args.test_ratio,
         seed=args.seed,
         background_source=bg_source,
         num_variations=args.variations,
-        output_size=args.size
+        output_size=args.size,
+        auto_discover_classes=not args.no_auto_discover,
+        move_files=args.move
     )
 
     # Print statistics

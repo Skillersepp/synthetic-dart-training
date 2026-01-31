@@ -10,10 +10,10 @@ model:
 
 # ----- Training -----
 training:
-  epochs: 100
-  batch_size: 16
-  imgsz: 800  # Input-Größe (wie DeepDarts)
-  patience: 20  # Early Stopping
+  epochs: 300  # Erhöht für bessere Konvergenz bei synthetischen Daten
+  batch_size: 32
+  imgsz: 1024  # Input-Größe (volle Auflösung nutzen!)
+  patience: 50  # Early Stopping (erhöht, um dem Model mehr Zeit zu geben)
 
   # Optimizer
   optimizer: AdamW  # SGD, Adam, AdamW
@@ -27,28 +27,40 @@ training:
   warmup_momentum: 0.8
   warmup_bias_lr: 0.1
 
+  # NMS & Detection
+  iou: 0.4  # IoU-Threshold für NMS während Training (WICHTIG für dichte Darts!)
+  max_det: 300  # Maximale Anzahl Detections
+
+  # Advanced Training
+  close_mosaic: 10  # Mosaic-Augmentation in letzten N Epochen deaktivieren
+
 # ----- Augmentation -----
-# Geometrische Augmentations sind DEAKTIVIERT
-# Hintergrund-Augmentation wird separat via augment_backgrounds.py gemacht
+# Geometrische Augmentations: Nur Translation und Scale!
+# Rotation ist DEAKTIVIERT, da 20-Segment immer oben sein soll
+# Hintergrund-Augmentation wird via train_with_backgrounds.py on-the-fly gemacht
 augmentation:
-  # Geometrisch (DEAKTIVIERT)
-  degrees: 0.0  # Rotation aus
-  translate: 0.0  # Translation aus
-  scale: 0.0  # Scale aus
-  shear: 0.0  # Shear aus
-  perspective: 0.0  # Perspektive aus
-  flipud: 0.0  # Vertical Flip aus
-  fliplr: 0.0  # Horizontal Flip aus
+  # Geometrisch
+  degrees: 0.0  # ❌ Rotation aus (20-Segment muss oben bleiben!)
+  translate: 0.1  # ✅ ±10% Verschiebung (Dartboard nicht immer perfekt zentriert)
+  scale: 0.3  # ✅ ±30% Skalierung (verschiedene Kamera-Distanzen, wichtig!)
+  shear: 0.0  # ❌ Shear aus (würde Board-Geometrie verfälschen)
+  perspective: 0.0003  # ⚠️ Sehr subtil (zusätzliche Perspektiv-Variation)
+  flipud: 0.0  # ❌ Vertical Flip aus (Board steht nie auf dem Kopf)
+  fliplr: 0.0  # ❌ Horizontal Flip aus (würde 20er-Position ändern)
 
-  # Farbe (leichte Variation erlaubt)
-  hsv_h: 0.01  # Hue (minimal)
-  hsv_s: 0.2  # Saturation
-  hsv_v: 0.2  # Value/Helligkeit
+  # Farbe (für verschiedene Beleuchtungssituationen)
+  hsv_h: 0.015  # Hue (minimal, nur leichte Farbverschiebung)
+  hsv_s: 0.4  # Saturation (erhöht für Beleuchtungsvarianz!)
+  hsv_v: 0.4  # Value/Helligkeit (erhöht für verschiedene Lichtverhältnisse!)
+  bgr: 0.0  # BGR channel shuffle aus
 
-  # Advanced (deaktiviert)
-  mosaic: 0.0  # Deaktiviert - nicht sinnvoll für Dartboards
-  mixup: 0.0  # Deaktiviert
-  copy_paste: 0.0  # Deaktiviert
+  # Advanced (alle deaktiviert für Dartboard-Spezialfall)
+  mosaic: 0.0  # ❌ Deaktiviert (mehrere Dartboards unrealistisch)
+  mixup: 0.0  # ❌ Deaktiviert
+  copy_paste: 0.0  # ❌ Deaktiviert
+  cutmix: 0.0  # ❌ Deaktiviert
+  auto_augment: ""  # ❌ Deaktiviert (RandAugment nicht geeignet für Dartboard)
+  erasing: 0.1  # ⚠️ Random Erasing reduziert (sonst zu aggressiv)
 
 # ----- Loss -----
 loss:
@@ -59,19 +71,21 @@ loss:
 # ----- Validation -----
 validation:
   val_interval: 1  # Alle N Epochs validieren
-  conf_threshold: 0.25
-  iou_threshold: 0.7
+  conf_threshold: 0.25  # Confidence-Threshold für Detections
+  iou_threshold: 0.4  # IoU-Threshold für NMS (WICHTIG für dichte Darts!)
 
 # ----- Hardware -----
 hardware:
   device: null  # null = auto, oder "0", "0,1", "cpu"
-  workers: 4
+  workers: 6
   amp: true  # Automatic Mixed Precision
 
 # ----- Dartboard Spezifisch -----
 dartboard:
   # BBox-Größe für Keypoints (Fraction der Bildgröße)
-  keypoint_bbox_size: 0.025  # 2.5% wie DeepDarts = 20px bei 800px
+  keypoint_bbox_size: 0.020  # 2.0% = ~20px bei 1024px (reduziert für dichte Darts!)
+  # DeepDarts nutzte 2.5%, aber bei 800px Bildgröße
+  # Bei 1024px und dichten Darts ist 2.0% besser (weniger Überlappung)
 
   # Board-Geometrie (BDO Standard, in Metern)
   r_double: 0.170
@@ -79,6 +93,11 @@ dartboard:
   r_outer_bull: 0.0159
   r_inner_bull: 0.00635
   w_ring: 0.01  # Breite Double/Treble Ring
+
+# ----- Custom Augmentation (für train_with_backgrounds.py) -----
+custom_augmentation:
+  # Gaußsches Rauschen (wird im Blending-Schritt hinzugefügt)
+  gaussian_noise: 0.02  # 2% Rauschen (0 = aus, 0.05 = 5% stark)
 
 # ----- Output -----
 output:

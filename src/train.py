@@ -43,17 +43,17 @@ def get_model_name(base_name: str) -> str:
 def train(
     dataset_yaml: str,
     config_path: str = None,
-    model_size: str = 'yolo26n',
-    epochs: int = 100,
-    batch_size: int = 16,
-    imgsz: int = 800,
+    model_size: str = None,
+    epochs: int = None,
+    batch_size: int = None,
+    imgsz: int = None,
     device: str = None,
     project: str = 'runs/train',
     name: str = None,
     resume: bool = False,
     pretrained: bool = True,
-    patience: int = 20,
-    workers: int = 8,
+    patience: int = None,
+    workers: int = None,
     **kwargs
 ):
     """
@@ -81,14 +81,38 @@ def train(
         config = load_config(Path(config_path))
         print(f"Config loaded: {config_path}")
 
-    # Adopt parameters from config (if not explicitly set)
-    training_cfg = config.get('training', {})
-    aug_cfg = config.get('augmentation', {})
+    # 1. Defaults
+    default_epochs = 100
+    default_batch = 16
+    default_imgsz = 800
+    default_patience = 20
+    default_workers = 8
+    default_model = 'yolo26n'
+    default_device = None
 
-    epochs = training_cfg.get('epochs', epochs)
-    batch_size = training_cfg.get('batch_size', batch_size)
-    imgsz = training_cfg.get('imgsz', imgsz)
-    patience = training_cfg.get('patience', patience)
+    # 2. Config overrides Defaults
+    training_cfg = config.get('training', {})
+    model_cfg = config.get('model', {})
+    aug_cfg = config.get('augmentation', {})
+    hw_cfg = config.get('hardware', {})
+
+    cfg_epochs = training_cfg.get('epochs', default_epochs)
+    cfg_batch = training_cfg.get('batch_size', default_batch)
+    cfg_imgsz = training_cfg.get('imgsz', default_imgsz)
+    cfg_patience = training_cfg.get('patience', default_patience)
+    cfg_workers = hw_cfg.get('workers', default_workers)
+    cfg_device = hw_cfg.get('device', default_device)
+    cfg_model = model_cfg.get('name', default_model)
+
+    # 3. CLI Args override Config
+    epochs = epochs if epochs is not None else cfg_epochs
+    batch_size = batch_size if batch_size is not None else cfg_batch
+    imgsz = imgsz if imgsz is not None else cfg_imgsz
+    patience = patience if patience is not None else cfg_patience
+    workers = workers if workers is not None else cfg_workers
+    model_size = model_size if model_size is not None else cfg_model
+    device = device if device is not None else cfg_device
+
 
     # Experiment name
     if name is None:
@@ -122,20 +146,27 @@ def train(
 
     # Augmentation parameters
     augment_args = {
-        'degrees': aug_cfg.get('degrees', 180),
+        'degrees': aug_cfg.get('degrees', 0.0),
         'translate': aug_cfg.get('translate', 0.1),
         'scale': aug_cfg.get('scale', 0.3),
         'shear': aug_cfg.get('shear', 0.0),
-        'perspective': aug_cfg.get('perspective', 0.0002),
-        'flipud': aug_cfg.get('flipud', 0.5),
-        'fliplr': aug_cfg.get('fliplr', 0.5),
+        'perspective': aug_cfg.get('perspective', 0.0003),
+        'flipud': aug_cfg.get('flipud', 0.0),
+        'fliplr': aug_cfg.get('fliplr', 0.0),
         'hsv_h': aug_cfg.get('hsv_h', 0.015),
-        'hsv_s': aug_cfg.get('hsv_s', 0.5),
-        'hsv_v': aug_cfg.get('hsv_v', 0.3),
+        'hsv_s': aug_cfg.get('hsv_s', 0.4),
+        'hsv_v': aug_cfg.get('hsv_v', 0.4),
+        'bgr': aug_cfg.get('bgr', 0.0),
         'mosaic': aug_cfg.get('mosaic', 0.0),
         'mixup': aug_cfg.get('mixup', 0.0),
         'copy_paste': aug_cfg.get('copy_paste', 0.0),
+        'cutmix': aug_cfg.get('cutmix', 0.0),
+        'auto_augment': aug_cfg.get('auto_augment', ''),
+        'erasing': aug_cfg.get('erasing', 0.1),
     }
+
+    # Validation config
+    val_cfg = config.get('validation', {})
 
     # Start training
     results = model.train(
@@ -165,6 +196,12 @@ def train(
         box=config.get('loss', {}).get('box', 7.5),
         cls=config.get('loss', {}).get('cls', 0.5),
         dfl=config.get('loss', {}).get('dfl', 1.5),
+        # NMS & Detection (wichtig für dichte Darts!)
+        iou=training_cfg.get('iou', val_cfg.get('iou_threshold', 0.4)),
+        max_det=training_cfg.get('max_det', 300),
+        conf=val_cfg.get('conf_threshold', 0.25),
+        # Advanced Training
+        close_mosaic=training_cfg.get('close_mosaic', 10),
         # Additional arguments
         plots=True,
         save=True,
@@ -204,26 +241,26 @@ def main():
     parser.add_argument(
         '--model', '-m',
         type=str,
-        default='yolo26n',
+        default=None,
         choices=['yolo26n', 'yolo26s', 'yolo26m', 'yolo26l', 'yolo26x'],
         help='Model size'
     )
     parser.add_argument(
         '--epochs', '-e',
         type=int,
-        default=100,
+        default=None,
         help='Number of epochs'
     )
     parser.add_argument(
         '--batch', '-b',
         type=int,
-        default=16,
+        default=None,
         help='Batch size'
     )
     parser.add_argument(
         '--imgsz',
         type=int,
-        default=800,
+        default=None,
         help='Input image size'
     )
     parser.add_argument(
@@ -257,13 +294,13 @@ def main():
     parser.add_argument(
         '--patience',
         type=int,
-        default=20,
+        default=None,
         help='Early Stopping Patience'
     )
     parser.add_argument(
         '--workers',
         type=int,
-        default=8,
+        default=None,
         help='Dataloader Workers'
     )
 
