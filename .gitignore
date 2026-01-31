@@ -6,6 +6,9 @@ datasets/*
 runs/*
 models/*
 
+# Ignore old approach
+old_approach/
+
 # Logs
 *.log
 *.out
